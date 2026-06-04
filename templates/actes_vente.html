@@ -472,6 +472,17 @@ function finaliserVente() {
     });
 }
 
+function chargerActes() {
+    showLoader();
+    
+    fetch('/api/actes')
+        .then(response => response.json())
+        .then(data => {
+            // Afficher les actes
+            hideLoader();
+        })
+        .catch(() => hideLoader());
+}
 // ========== INITIALISATION ==========
 window.onload = function() {
     checkSelectedPatient();

@@ -7,6 +7,9 @@ import secrets
 from datetime import datetime
 import json
 import os
+import pandas as pd
+from io import BytesIO
+from db_helper import db
 
 # ========== DÉTECTION ENVIRONNEMENT ==========
 IS_PRODUCTION = os.environ.get('RENDER') == 'true' or os.environ.get('PRODUCTION') == 'true'
@@ -290,10 +293,11 @@ def register():
 def dashboard():
     structure_id = session.get('structure_id')
     
-    # ========== PATIENTS ==========
-    patients = sheets_helper.get_all_records('patients')
-    patients = [p for p in patients if str(p.get('structure_id')) == str(structure_id)]
-    total_patients = len(patients)
+    # ========== PATIENTS (depuis Neon) ==========
+    patients = db.execute_query("""
+        SELECT COUNT(*) as total FROM patients WHERE structure_id = %s
+    """, (structure_id,))
+    total_patients = patients[0]['total'] if patients else 0
     
     today = datetime.now().strftime('%Y-%m-%d')
     
@@ -396,40 +400,145 @@ def debug_pharma():
 @app.route('/patients')
 @login_required
 def patients():
-    patients_list = sheets_helper.get_all_records('patients')
-    print(f"🔍 Patients trouvés pour structure {session.get('structure_id')}: {len(patients_list)}")
-    return render_template('patients.html', patients=patients_list)
+    structure_id = session.get('structure_id')
+    
+    if not structure_id:
+        flash('Structure non trouvée', 'error')
+        return redirect(url_for('dashboard'))
+    
+    # Récupérer depuis Neon
+    try:
+        patients = db.execute_query("""
+            SELECT id, nom, prenom, telephone, adresse, date_naissance,
+                   type_assurance, taux_prise_charge, numero_assure
+            FROM patients 
+            WHERE structure_id = %s 
+            ORDER BY id DESC
+        """, (structure_id,))
+        
+        print(f"📊 Requête SQL exécutée pour structure {structure_id}")
+        print(f"   Type de résultat: {type(patients)}")
+        
+        # Convertir pour le template
+        patients_list = []
+        if patients:
+            if isinstance(patients, list):
+                for p in patients:
+                    if isinstance(p, dict):
+                        patients_list.append({
+                            'ID': p.get('id'),
+                            'nom': p.get('nom', ''),
+                            'prenom': p.get('prenom', ''),
+                            'telephone': p.get('telephone', ''),
+                            'adresse': p.get('adresse', ''),
+                            'date_naissance': p.get('date_naissance', ''),
+                            'type_assurance': p.get('type_assurance', 'non_assure'),
+                            'taux_prise_charge': p.get('taux_prise_charge', 0),
+                            'numero_assure': p.get('numero_assure', '')
+                        })
+                    elif isinstance(p, (list, tuple)) and len(p) >= 9:
+                        patients_list.append({
+                            'ID': p[0],
+                            'nom': p[1] or '',
+                            'prenom': p[2] or '',
+                            'telephone': p[3] or '',
+                            'adresse': p[4] or '',
+                            'date_naissance': p[5] or '',
+                            'type_assurance': p[6] or 'non_assure',
+                            'taux_prise_charge': p[7] or 0,
+                            'numero_assure': p[8] or ''
+                        })
+        
+        print(f"📊 Patients envoyés au template: {len(patients_list)}")
+        
+        return render_template('patients.html', patients=patients_list)
+        
+    except Exception as e:
+        print(f"❌ Erreur lors du chargement des patients: {e}")
+        flash(f'Erreur lors du chargement des patients: {str(e)}', 'error')
+        return render_template('patients.html', patients=[])
 
-# MODIFIER la route d'ajout patient
+
 @app.route('/api/patients', methods=['POST'])
 @login_required
 def api_add_patient():
     try:
         data = request.json
-        patients = sheets_helper.get_all_records('patients')
-        new_id = 1
-        for p in patients:
-            if p.get('ID', 0) >= new_id:
-                new_id = p.get('ID') + 1
+        structure_id = session.get('structure_id') or 1
         
-        new_patient = [
-            new_id,
+        result = db.execute_query("""
+            INSERT INTO patients (structure_id, nom, prenom, telephone, adresse, 
+                                  date_naissance, type_assurance, taux_prise_charge, numero_assure)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+        """, (
+            structure_id,
             data.get('nom'),
             data.get('prenom', ''),
             data.get('telephone'),
             data.get('adresse', ''),
             data.get('date_naissance', ''),
             data.get('type_assurance', 'non_assure'),
-            str(data.get('taux_prise_charge', 0)),
-            data.get('numero_assure', ''),
-            str(session.get('structure_id')),
-            datetime.now().isoformat()
-        ]
+            data.get('taux_prise_charge', 0),
+            data.get('numero_assure', '')
+        ))
         
-        sheets_helper.add_record('patients', new_patient)
-        return jsonify({'success': True, 'id': new_id})
+        # Commit explicite
+        if db.conn:
+            db.conn.commit()
+        
+        if result and len(result) > 0:
+            return jsonify({'success': True, 'id': result[0]['id']})
+        else:
+            return jsonify({'success': False, 'error': 'Erreur insertion'}), 500
+        
     except Exception as e:
+        if db.conn:
+            db.conn.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/patients/<int:id>', methods=['GET'])
+@login_required
+def api_get_patient(id):
+    """Récupérer un patient par son ID"""
+    try:
+        structure_id = session.get('structure_id')
+        
+        if not structure_id:
+            return jsonify({'success': False, 'error': 'Structure non trouvée'}), 400
+        
+        patient = db.execute_query("""
+            SELECT id, nom, prenom, telephone, adresse, date_naissance,
+                   type_assurance, taux_prise_charge, numero_assure
+            FROM patients 
+            WHERE id = %s AND structure_id = %s
+        """, (id, structure_id))
+        
+        if not patient or len(patient) == 0:
+            return jsonify({'success': False, 'error': 'Patient non trouvé'}), 404
+        
+        # Convertir en dictionnaire
+        if isinstance(patient[0], dict):
+            patient_data = patient[0]
+        else:
+            patient_data = {
+                'id': patient[0][0],
+                'nom': patient[0][1],
+                'prenom': patient[0][2],
+                'telephone': patient[0][3],
+                'adresse': patient[0][4],
+                'date_naissance': patient[0][5],
+                'type_assurance': patient[0][6],
+                'taux_prise_charge': patient[0][7],
+                'numero_assure': patient[0][8]
+            }
+        
+        return jsonify(patient_data)
+        
+    except Exception as e:
+        print(f"❌ Erreur GET patient: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 # ROUTE de vérification (pour debug)
 @app.route('/check_sheets')
@@ -773,9 +882,13 @@ def recu(vente_id, type):
     from datetime import datetime
     
     structure_id = session.get('structure_id')
+    
+    # 🔥 Récupérer les infos de la structure (reste dans Sheets)
     structures = sheets_helper.get_all_records('structures', use_prefix=False)
     structure_info = next((s for s in structures if s.get('ID') == structure_id), {})
-    patients = sheets_helper.get_all_records('patients')
+    
+    # 🔥 Récupérer les patients DEPUIS NEON
+    patients = db.execute_query("SELECT * FROM patients WHERE structure_id = %s", (structure_id,))
     
     articles = []
     sous_total = 0
@@ -807,10 +920,13 @@ def recu(vente_id, type):
                 net_a_payer = float(v.get('net_a_payer', 0))
                 patient_id = v.get('patient_id')
         
+        # 🔥 Chercher le patient dans Neon
         if patient_id:
-            patient_info = next((p for p in patients if str(p.get('ID')) == str(patient_id)), {})
-            type_assurance = patient_info.get('type_assurance', 'non_assure')
-            numero_assure = patient_info.get('numero_assure', '')
+            for p in patients:
+                if str(p.get('id')) == str(patient_id):
+                    type_assurance = p.get('type_assurance', 'non_assure')
+                    numero_assure = p.get('numero_assure', '')
+                    break
     
     else:  # pharmacie
         ventes = sheets_helper.get_all_records('ventes_pharma')
@@ -832,29 +948,21 @@ def recu(vente_id, type):
                 patient_id = v.get('patient_id')
         
         if patient_id:
-            patient_info = next((p for p in patients if str(p.get('ID')) == str(patient_id)), {})
-            type_assurance = patient_info.get('type_assurance', 'non_assure')
-            numero_assure = patient_info.get('numero_assure', '')
+            for p in patients:
+                if str(p.get('id')) == str(patient_id):
+                    type_assurance = p.get('type_assurance', 'non_assure')
+                    numero_assure = p.get('numero_assure', '')
+                    break
     
-    # 🔥 GESTION DES ASSURANCES PERSONNALISÉES
-    assurance_text = 'Non assuré'
+    # Gestion des assurances personnalisées
+    assurance_text = type_assurance
     if type_assurance == 'amu_cnss':
         assurance_text = 'AMU-CNSS'
     elif type_assurance == 'amu_inam':
         assurance_text = 'AMU-INAM'
-    elif type_assurance == 'autre':
-        assurance_text = 'Autre assurance'
-    elif type_assurance and type_assurance not in ['non_assure', 'amu_cnss', 'amu_inam', 'autre']:
-        # 🔥 C'est une assurance personnalisée !
-        assurance_text = type_assurance
-
-    # 🔥 AJOUTER CETTE LIGNE - Générer un nom de fichier
-    patient_nom_clean = patient_nom.replace(' ', '_').replace("'", "").replace('é', 'e').replace('è', 'e').replace('ê', 'e').replace('à', 'a').replace('ç', 'c')
-    nom_fichier = f"archive_facture_{patient_nom_clean}_{vente_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    structure_logo=structure_info.get('logo_url', '')
-    nom_caissier = session.get('user_name', '')
-
-
+    elif type_assurance == 'non_assure':
+        assurance_text = 'Non assuré'
+    
     return render_template('recu_client.html',
                          vente_id=vente_id,
                          articles=articles,
@@ -870,10 +978,8 @@ def recu(vente_id, type):
                          structure_adresse=structure_info.get('adresse', ''),
                          structure_telephone=structure_info.get('telephone', ''),
                          date_actuelle=datetime.now().strftime('%d/%m/%Y %H:%M'),
-                         nom_fichier=nom_fichier,
-                         structure_logo=structure_logo,
-                         nom_caissier=nom_caissier)
-
+                         structure_logo=structure_info.get('logo_url', ''),
+                         nom_caissier=session.get('user_name', ''))
                        
 
 @app.route('/historique_ventes')
@@ -1969,6 +2075,121 @@ def admin_logout():
     flash('Déconnecté de l\'administration globale', 'info')
     return redirect(url_for('index'))
 
+@app.route('/referentiel/cnss')
+@login_required
+def referentiel_cnss():
+    return render_template('referentiel.html', 
+                         titre="AMU-CNSS - Référentiel des prestataires",
+                         url="https://referentiels.amu.tg/#/providers")
+
+@app.route('/referentiel/inam')
+@login_required
+def referentiel_inam():
+    return render_template('referentiel.html', 
+                         titre="AMU-INAM - Portail Prestataire",
+                         url="https://prestaplus.inam.tg/Vue/index.php")
+
+@app.route('/api/import/actes', methods=['POST'])
+@login_required
+def import_actes():
+    try:
+        file = request.files['file']
+        structure_id = session.get('structure_id')
+        
+        # Lire le fichier Excel
+        df = pd.read_excel(BytesIO(file.read()))
+        
+        # Récupérer les actes existants
+        actes = sheets_helper.get_all_records('actes')
+        next_id = len(actes) + 1
+        
+        compteur = 0
+        for _, row in df.iterrows():
+            new_acte = [
+                next_id + compteur,
+                row.get('code', f"ACT-{compteur+1}"),
+                row.get('nom', 'Acte'),
+                row.get('prix', 0),
+                row.get('description', ''),
+                structure_id
+            ]
+            sheets_helper.add_record('actes', new_acte)
+            compteur += 1
+        
+        return jsonify({'message': f'✅ {compteur} actes importés avec succès'})
+        
+    except Exception as e:
+        return jsonify({'message': f'❌ Erreur: {str(e)}'}), 500
+
+@app.route('/api/import/produits', methods=['POST'])
+@login_required
+def import_produits():
+    try:
+        file = request.files['file']
+        structure_id = session.get('structure_id')
+        
+        df = pd.read_excel(BytesIO(file.read()))
+        
+        produits = sheets_helper.get_all_records('produits')
+        next_id = len(produits) + 1
+        
+        compteur = 0
+        for _, row in df.iterrows():
+            new_produit = [
+                next_id + compteur,
+                row.get('code', f"PRD-{compteur+1}"),
+                row.get('nom', 'Produit'),
+                row.get('prix', 0),
+                row.get('stock', 0),
+                structure_id
+            ]
+            sheets_helper.add_record('produits', new_produit)
+            compteur += 1
+        
+        return jsonify({'message': f'✅ {compteur} produits importés avec succès'})
+        
+    except Exception as e:
+        return jsonify({'message': f'❌ Erreur: {str(e)}'}), 500
+
+@app.route('/api/patients/<int:patient_id>', methods=['PUT'])
+@login_required
+def api_update_patient(patient_id):
+    try:
+        data = request.json
+        structure_id = session.get('structure_id')
+        
+        db.execute_query("""
+            UPDATE patients 
+            SET nom = %s, prenom = %s, telephone = %s, adresse = %s,
+                type_assurance = %s, taux_prise_charge = %s, numero_assure = %s
+            WHERE id = %s AND structure_id = %s
+        """, (
+            data.get('nom'),
+            data.get('prenom', ''),
+            data.get('telephone'),
+            data.get('adresse', ''),
+            data.get('type_assurance', 'non_assure'),
+            data.get('taux_prise_charge', 0),
+            data.get('numero_assure', ''),
+            patient_id,
+            structure_id
+        ))
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/test_db')
+def test_db():
+    try:
+        # Tester la connexion
+        result = db.execute_query("SELECT 1 as test")
+        if result and len(result) > 0:
+            return jsonify({'status': 'ok', 'message': 'Connexion OK'})
+        else:
+            return jsonify({'status': 'error', 'message': 'Pas de résultat'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
 
 if __name__ == '__main__':
     # Récupère le port depuis la variable d'environnement ou utilise 5000 par défaut

@@ -513,6 +513,17 @@ function finaliserVente() {
         btn.innerHTML = originalText;
     });
 }
+function chargerProduits() {
+    showLoader();
+    
+    fetch('/api/produits')
+        .then(response => response.json())
+        .then(data => {
+            // Afficher les produits
+            hideLoader();
+        })
+        .catch(() => hideLoader());
+}
 // ========== INITIALISATION ==========
 window.onload = function() {
     checkSelectedPatient();

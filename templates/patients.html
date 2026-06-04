@@ -30,7 +30,7 @@
                                 <i class="fas fa-search text-primary"></i>
                             </span>
                             <input type="text" id="searchInput" class="form-control border-start-0" 
-                                   placeholder="Rechercher par nom, prénom, téléphone ou numéro d'assuré..." 
+                                   placeholder="Rechercher par nom, prénom, téléphone..." 
                                    onkeyup="filterPatients()">
                             <button class="btn btn-outline-secondary" onclick="clearSearch()" type="button">
                                 <i class="fas fa-times"></i>
@@ -49,6 +49,8 @@
                                 <th>ID</th>
                                 <th>Nom complet</th>
                                 <th>Téléphone</th>
+                                <th>Adresse</th>
+                                <th>Date naissance</th>
                                 <th>Assurance</th>
                                 <th>Taux</th>
                                 <th>Actions</th>
@@ -56,10 +58,12 @@
                         </thead>
                         <tbody id="patientsList">
                             {% for patient in patients %}
-                            <tr class="patient-row">
+                            <tr class="patient-row" data-id="{{ patient.ID }}">
                                 <td>{{ patient.ID }}</td>
                                 <td>{{ patient.nom }} {{ patient.prenom }}</td>
                                 <td>{{ patient.telephone }}</td>
+                                <td>{{ patient.adresse or '-' }}</td>
+                                <td>{{ patient.date_naissance or '-' }}</td>
                                 <td>
                                     {% if patient.type_assurance == 'non_assure' %}
                                         <span class="badge bg-secondary">Non assuré</span>
@@ -74,19 +78,19 @@
                                 <td>{{ patient.taux_prise_charge or 0 }}%</td>
                                 <td>
                                     <button class="btn btn-sm btn-success" onclick='selectPatient({{ patient.ID }}, "{{ patient.nom }} {{ patient.prenom }}", "{{ patient.type_assurance }}", {{ patient.taux_prise_charge or 0 }})'>
-                                        <i class="fas fa-check"></i> Sélectionner
+                                        <i class="fas fa-check"></i>
                                     </button>
                                     <button class="btn btn-sm btn-warning" onclick="editPatient({{ patient.ID }})">
                                         <i class="fas fa-edit"></i>
                                     </button>
                                     <button class="btn btn-sm btn-info" onclick="envoyerLienPatient({{ patient.ID }}, '{{ patient.nom }} {{ patient.prenom }}', '{{ patient.telephone }}')">
-                                        <i class="fab fa-whatsapp"></i> Lien RDV
+                                        <i class="fab fa-whatsapp"></i>
                                     </button>
                                 </td>
                             </tr>
                             {% else %}
                             <tr>
-                                <td colspan="6" class="text-center">Aucun patient</td>
+                                <td colspan="8" class="text-center">Aucun patient</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -116,13 +120,15 @@
             </div>
             <div class="modal-body">
                 <form id="patientForm">
-                    <div class="mb-3">
-                        <label class="form-label">Nom *</label>
-                        <input type="text" class="form-control" id="nom" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Prénom</label>
-                        <input type="text" class="form-control" id="prenom">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Nom *</label>
+                            <input type="text" class="form-control" id="nom" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Prénom</label>
+                            <input type="text" class="form-control" id="prenom">
+                        </div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Téléphone *</label>
@@ -155,19 +161,84 @@
                     
                     <div class="mb-3" id="numero_assure_div" style="display:none;">
                         <label class="form-label">Numéro d'assuré</label>
-                        <input type="text" class="form-control" id="numero_assure" placeholder="Numéro de carte d'assurance">
+                        <input type="text" class="form-control" id="numero_assure" placeholder="Numéro de carte">
                     </div>
                     
                     <div class="mb-3" id="autre_assurance_div" style="display:none;">
                         <label class="form-label">Nom de l'assurance</label>
-                        <input type="text" class="form-control" id="autre_assurance" placeholder="Ex: CNPS, MUTUELLE, ALLIANZ...">
-                        <small class="text-muted">Précisez le nom de l'assurance</small>
+                        <input type="text" class="form-control" id="autre_assurance" placeholder="Ex: CNPS, MUTUELLE...">
                     </div>
                 </form>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
                 <button type="button" class="btn btn-info" onclick="savePatient()">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Modification Patient -->
+<div class="modal fade" id="editPatientModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-white">
+                <h5 class="modal-title"><i class="fas fa-edit"></i> Modifier le patient</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editPatientForm">
+                    <input type="hidden" id="editId">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Nom *</label>
+                            <input type="text" class="form-control" id="editNom" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Prénom</label>
+                            <input type="text" class="form-control" id="editPrenom">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Téléphone *</label>
+                        <input type="tel" class="form-control" id="editTelephone" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Adresse</label>
+                        <input type="text" class="form-control" id="editAdresse">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Date de naissance</label>
+                        <input type="date" class="form-control" id="editDateNaissance">
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Assurance</label>
+                            <select class="form-control" id="editAssurance" onchange="toggleEditTaux()">
+                                <option value="non_assure">Non assuré</option>
+                                <option value="amu_cnss">AMU-CNSS</option>
+                                <option value="amu_inam">AMU-INAM</option>
+                                <option value="autre">Autre assurance</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Taux (%)</label>
+                            <input type="number" class="form-control" id="editTaux" min="0" max="100">
+                        </div>
+                    </div>
+                    <div class="mb-3" id="editNumeroAssureDiv" style="display:none;">
+                        <label class="form-label">Numéro d'assuré</label>
+                        <input type="text" class="form-control" id="editNumeroAssure">
+                    </div>
+                    <div class="mb-3" id="editAutreAssuranceDiv" style="display:none;">
+                        <label class="form-label">Nom de l'assurance</label>
+                        <input type="text" class="form-control" id="editAutreAssurance">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button class="btn btn-warning" onclick="saveEditPatient()">Enregistrer</button>
             </div>
         </div>
     </div>
@@ -182,176 +253,174 @@ let currentFiltered = [];
 
 // Initialisation
 document.addEventListener('DOMContentLoaded', function() {
-    // Collecter toutes les lignes de patients
     const rows = document.querySelectorAll('#patientsList tr.patient-row');
     rows.forEach(row => {
         const cells = row.cells;
         allPatients.push({
             element: row,
             id: cells[0].innerText,
-            nom: cells[1].innerText.toLowerCase(),
+            nomComplet: cells[1].innerText.toLowerCase(),
             telephone: cells[2].innerText,
-            assurance: cells[3].innerText.toLowerCase(),
-            taux: cells[4].innerText
+            adresse: cells[3].innerText,
+            dateNaissance: cells[4].innerText,
+            assurance: cells[5].innerText.toLowerCase(),
+            taux: cells[6].innerText
         });
     });
-    
     currentFiltered = [...allPatients];
     updateResultCount();
+    updatePagination();
     displayPage(1);
 });
 
-// Fonction de filtrage
 function filterPatients() {
     const searchTerm = document.getElementById('searchInput').value.toLowerCase().trim();
-    
     if (searchTerm === '') {
         currentFiltered = [...allPatients];
     } else {
-        currentFiltered = allPatients.filter(patient => 
-            patient.nom.includes(searchTerm) || 
-            patient.telephone.includes(searchTerm) ||
-            patient.assurance.includes(searchTerm)
+        currentFiltered = allPatients.filter(p => 
+            p.nomComplet.includes(searchTerm) || 
+            p.telephone.includes(searchTerm)
         );
     }
-    
     currentPage = 1;
     updateResultCount();
-    displayPage(currentPage);
-}
-
-// Mettre à jour le compteur
-function updateResultCount() {
-    const countSpan = document.getElementById('resultCount');
-    if (countSpan) {
-        countSpan.textContent = currentFiltered.length;
-    }
-}
-
-// Afficher une page spécifique
-function displayPage(page) {
-    const start = (page - 1) * rowsPerPage;
-    const end = start + rowsPerPage;
-    const pagePatients = currentFiltered.slice(start, end);
-    
-    // Cacher toutes les lignes
-    allPatients.forEach(patient => {
-        patient.element.style.display = 'none';
-    });
-    
-    // Afficher les lignes de la page
-    pagePatients.forEach(patient => {
-        patient.element.style.display = '';
-    });
-    
     updatePagination();
-}
-
-// Mettre à jour la pagination
-function updatePagination() {
-    const totalPages = Math.ceil(currentFiltered.length / rowsPerPage);
-    const pagination = document.getElementById('pagination');
-    
-    if (!pagination) return;
-    
-    let html = '';
-    
-    // Bouton Précédent
-    html += '<li class="page-item ' + (currentPage === 1 ? 'disabled' : '') + '">';
-    html += '<a class="page-link" href="#" onclick="changePage(' + (currentPage - 1) + '); return false;">«</a>';
-    html += '</li>';
-    
-    // Numéros de pages
-    for (let i = 1; i <= totalPages; i++) {
-        if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2)) {
-            html += '<li class="page-item ' + (i === currentPage ? 'active' : '') + '">';
-            html += '<a class="page-link" href="#" onclick="changePage(' + i + '); return false;">' + i + '</a>';
-            html += '</li>';
-        } else if (i === currentPage - 3 || i === currentPage + 3) {
-            html += '<li class="page-item disabled"><span class="page-link">...</span></li>';
-        }
-    }
-    
-    // Bouton Suivant
-    html += '<li class="page-item ' + (currentPage === totalPages ? 'disabled' : '') + '">';
-    html += '<a class="page-link" href="#" onclick="changePage(' + (currentPage + 1) + '); return false;">»</a>';
-    html += '</li>';
-    
-    pagination.innerHTML = html;
-}
-
-// Changer de page
-function changePage(page) {
-    const totalPages = Math.ceil(currentFiltered.length / rowsPerPage);
-    if (page < 1 || page > totalPages) return;
-    currentPage = page;
     displayPage(currentPage);
 }
 
-// Effacer la recherche
 function clearSearch() {
     document.getElementById('searchInput').value = '';
     filterPatients();
 }
 
-// Exporter vers CSV
-function exportToCSV() {
-    let csvContent = "ID,Nom complet,Téléphone,Assurance,Taux prise en charge\n";
-    
-    currentFiltered.forEach(patient => {
-        const cells = patient.element.cells;
-        csvContent += cells[0].innerText + "," + cells[1].innerText + "," + cells[2].innerText + "," + cells[3].innerText + "," + cells[4].innerText + "\n";
-    });
-    
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.href = url;
-    link.setAttribute('download', 'patients_list.csv');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+function updateResultCount() {
+    document.getElementById('resultCount').textContent = currentFiltered.length;
 }
 
-let selectedPatientId = null;
-let selectedPatientName = null;
-let selectedPatientAssurance = null;
-let selectedPatientTaux = null;
+function displayPage(page) {
+    const start = (page - 1) * rowsPerPage;
+    const end = start + rowsPerPage;
+    
+    allPatients.forEach(p => p.element.style.display = 'none');
+    currentFiltered.slice(start, end).forEach(p => p.element.style.display = '');
+}
 
-// Gestion des taux
+function updatePagination() {
+    const totalPages = Math.ceil(currentFiltered.length / rowsPerPage);
+    const pagination = document.getElementById('pagination');
+    if (!pagination) return;
+    
+    if (totalPages <= 1) {
+        pagination.innerHTML = '';
+        return;
+    }
+    
+    let html = `<li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+                    <a class="page-link" href="#" onclick="changePage(${currentPage - 1}); return false;">«</a>
+                </li>`;
+    
+    let startPage = Math.max(1, currentPage - 2);
+    let endPage = Math.min(totalPages, startPage + 4);
+    
+    for (let i = startPage; i <= endPage; i++) {
+        html += `<li class="page-item ${i === currentPage ? 'active' : ''}">
+                    <a class="page-link" href="#" onclick="changePage(${i}); return false;">${i}</a>
+                 </li>`;
+    }
+    
+    html += `<li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+                <a class="page-link" href="#" onclick="changePage(${currentPage + 1}); return false;">»</a>
+             </li>`;
+    pagination.innerHTML = html;
+}
+
+function changePage(page) {
+    const totalPages = Math.ceil(currentFiltered.length / rowsPerPage);
+    if (page < 1 || page > totalPages) return;
+    currentPage = page;
+    displayPage(currentPage);
+    updatePagination();
+}
+
+function exportToCSV() {
+    let csvContent = "ID,Nom complet,Téléphone,Adresse,Date naissance,Assurance,Taux\n";
+    currentFiltered.forEach(p => {
+        const cells = p.element.cells;
+        csvContent += `"${cells[0].innerText}","${cells[1].innerText}","${cells[2].innerText}","${cells[3].innerText}","${cells[4].innerText}","${cells[5].innerText}","${cells[6].innerText}"\n`;
+    });
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'patients.csv';
+    link.click();
+    URL.revokeObjectURL(link.href);
+}
+
+// ========== GESTION ASSURANCE ==========
 function toggleTaux() {
     const type = document.getElementById('type_assurance').value;
     const tauxInput = document.getElementById('taux_prise_charge');
     const numeroDiv = document.getElementById('numero_assure_div');
-    const autreAssuranceDiv = document.getElementById('autre_assurance_div');
+    const autreDiv = document.getElementById('autre_assurance_div');
     
     if (type === 'non_assure') {
         tauxInput.value = 0;
         tauxInput.readOnly = true;
         numeroDiv.style.display = 'none';
-        autreAssuranceDiv.style.display = 'none';
+        autreDiv.style.display = 'none';
     } else if (type === 'amu_cnss') {
         tauxInput.value = 80;
         tauxInput.readOnly = false;
         numeroDiv.style.display = 'block';
-        autreAssuranceDiv.style.display = 'none';
+        autreDiv.style.display = 'none';
     } else if (type === 'amu_inam') {
         tauxInput.value = 80;
         tauxInput.readOnly = false;
         numeroDiv.style.display = 'block';
-        autreAssuranceDiv.style.display = 'none';
+        autreDiv.style.display = 'none';
     } else if (type === 'autre') {
         tauxInput.value = 80;
         tauxInput.readOnly = false;
         numeroDiv.style.display = 'block';
-        autreAssuranceDiv.style.display = 'block';
+        autreDiv.style.display = 'block';
     }
 }
 
+function toggleEditTaux() {
+    const type = document.getElementById('editAssurance').value;
+    const tauxInput = document.getElementById('editTaux');
+    const numeroDiv = document.getElementById('editNumeroAssureDiv');
+    const autreDiv = document.getElementById('editAutreAssuranceDiv');
+    
+    if (type === 'non_assure') {
+        tauxInput.value = 0;
+        tauxInput.readOnly = true;
+        numeroDiv.style.display = 'none';
+        autreDiv.style.display = 'none';
+    } else if (type === 'amu_cnss') {
+        tauxInput.value = 80;
+        tauxInput.readOnly = false;
+        numeroDiv.style.display = 'block';
+        autreDiv.style.display = 'none';
+    } else if (type === 'amu_inam') {
+        tauxInput.value = 80;
+        tauxInput.readOnly = false;
+        numeroDiv.style.display = 'block';
+        autreDiv.style.display = 'none';
+    } else if (type === 'autre') {
+        tauxInput.value = 80;
+        tauxInput.readOnly = false;
+        numeroDiv.style.display = 'block';
+        autreDiv.style.display = 'block';
+    }
+}
+
+// ========== AJOUT PATIENT ==========
 function showAddModal() {
     document.getElementById('patientForm').reset();
     document.getElementById('taux_prise_charge').value = 0;
+    document.getElementById('taux_prise_charge').readOnly = true;
     document.getElementById('numero_assure_div').style.display = 'none';
     document.getElementById('autre_assurance_div').style.display = 'none';
     new bootstrap.Modal(document.getElementById('patientModal')).show();
@@ -376,6 +445,11 @@ function savePatient() {
         numero_assure: document.getElementById('numero_assure').value
     };
     
+    if (!patient.nom || !patient.telephone) {
+        alert('Veuillez remplir les champs obligatoires (Nom et Téléphone)');
+        return;
+    }
+    
     fetch('/api/patients', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -390,76 +464,124 @@ function savePatient() {
         }
     })
     .catch(error => {
-        console.error('Erreur:', error);
-        alert('Erreur lors de l\'enregistrement');
+        alert('Erreur lors de l\'enregistrement: ' + error);
     });
 }
 
-function envoyerLienPatient(id, nom, telephone) {
-    // Nettoyer le numéro
-    let tel = telephone.toString().replace(/\s/g, '').replace(/^\+/, '');
-    if (!tel.startsWith('228') && !tel.startsWith('229') && !tel.startsWith('221')) {
-        tel = '228' + tel;
+// ========== MODIFICATION PATIENT (CORRIGÉE - utilise les données du tableau) ==========
+function editPatient(id) {
+    if (!id || id === 'undefined') {
+        alert('Erreur: ID patient invalide');
+        return;
     }
     
-    // Créer le token et le lien
-    let token = btoa(`${id}_${Date.now()}`);
-    let lien = `${window.location.origin}/patient/rendez_vous/${id}/${token}`;
+    // Récupérer la ligne du tableau
+    const row = document.querySelector(`tr.patient-row[data-id="${id}"]`);
+    if (!row) {
+        alert('Patient non trouvé');
+        return;
+    }
     
-    // 🔥 Récupérer le nom de la structure depuis le backend
-    fetch('/api/structure/nom')
-        .then(response => response.json())
-        .then(data => {
-            let structureNom = data.nom || 'Notre établissement';
-            
-            // Message avec le nom de la structure
-            let message = `🏥 *${structureNom}*%0A%0A`;
-            message += `Bonjour *${nom}*,%0A%0A`;
-            message += `Voici votre lien pour consulter vos rendez-vous :%0A`;
-            message += `${lien}%0A%0A`;
-            message += `📅 Vous pourrez voir :%0A`;
-            message += `- La date et l'heure de vos rendez-vous%0A`;
-            message += `- Le motif%0A`;
-            message += `- Le statut (confirmé, programmé, etc.)%0A%0A`;
-            message += `🔒 Ce lien est personnel et sécurisé.%0A%0A`;
-            message += `📞 Pour modifier ou annuler, veuillez nous contacter.`;
-            
-            let whatsappUrl = `https://wa.me/${tel}?text=${message}`;
-            window.open(whatsappUrl, '_blank');
-        })
-        .catch(() => {
-            // Fallback si erreur
-            let message = `🏥 *Medilogic-GHP*%0A%0A`;
-            message += `Bonjour *${nom}*,%0A%0A`;
-            message += `Voici votre lien pour consulter vos rendez-vous :%0A`;
-            message += `${lien}%0A%0A`;
-            message += `📅 Vous pourrez voir :%0A`;
-            message += `- La date et l'heure de vos rendez-vous%0A`;
-            message += `- Le motif%0A`;
-            message += `- Le statut (confirmé, programmé, etc.)%0A%0A`;
-            message += `🔒 Ce lien est personnel et sécurisé.%0A%0A`;
-            message += `📞 Pour modifier ou annuler, veuillez nous contacter.`;
-            
-            let whatsappUrl = `https://wa.me/${tel}?text=${message}`;
-            window.open(whatsappUrl, '_blank');
-        });
+    const cells = row.cells;
+    
+    // Extraire le nom et prénom
+    const nomComplet = cells[1].innerText.trim();
+    const firstSpace = nomComplet.indexOf(' ');
+    const nom = firstSpace > 0 ? nomComplet.substring(0, firstSpace) : nomComplet;
+    const prenom = firstSpace > 0 ? nomComplet.substring(firstSpace + 1) : '';
+    
+    // Extraire le texte d'assurance et le convertir en valeur
+    const assuranceText = cells[5].innerText.toLowerCase();
+    let assuranceValue = 'non_assure';
+    let autreAssuranceValue = '';
+    
+    if (assuranceText.includes('amu-cnss')) {
+        assuranceValue = 'amu_cnss';
+    } else if (assuranceText.includes('amu-inam')) {
+        assuranceValue = 'amu_inam';
+    } else if (!assuranceText.includes('non assuré')) {
+        assuranceValue = 'autre';
+        autreAssuranceValue = cells[5].innerText;
+    }
+    
+    // Remplir le formulaire
+    document.getElementById('editId').value = id;
+    document.getElementById('editNom').value = nom;
+    document.getElementById('editPrenom').value = prenom;
+    document.getElementById('editTelephone').value = cells[2].innerText;
+    document.getElementById('editAdresse').value = cells[3].innerText !== '-' ? cells[3].innerText : '';
+    document.getElementById('editDateNaissance').value = cells[4].innerText !== '-' ? cells[4].innerText : '';
+    document.getElementById('editTaux').value = cells[6].innerText.replace('%', '');
+    document.getElementById('editAssurance').value = assuranceValue;
+    document.getElementById('editAutreAssurance').value = autreAssuranceValue;
+    document.getElementById('editNumeroAssure').value = '';
+    
+    toggleEditTaux();
+    
+    new bootstrap.Modal(document.getElementById('editPatientModal')).show();
 }
 
+function saveEditPatient() {
+    const id = document.getElementById('editId').value;
+    let typeAssurance = document.getElementById('editAssurance').value;
+    let autreAssurance = document.getElementById('editAutreAssurance').value;
+    
+    if (typeAssurance === 'autre' && autreAssurance.trim() !== '') {
+        typeAssurance = autreAssurance.trim();
+    }
+    
+    const patient = {
+        nom: document.getElementById('editNom').value,
+        prenom: document.getElementById('editPrenom').value,
+        telephone: document.getElementById('editTelephone').value,
+        adresse: document.getElementById('editAdresse').value,
+        date_naissance: document.getElementById('editDateNaissance').value,
+        type_assurance: typeAssurance,
+        taux_prise_charge: document.getElementById('editTaux').value,
+        numero_assure: document.getElementById('editNumeroAssure').value
+    };
+    
+    if (!patient.nom || !patient.telephone) {
+        alert('Veuillez remplir les champs obligatoires');
+        return;
+    }
+    
+    fetch(`/api/patients/${id}`, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(patient)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if(data.success) {
+            location.reload();
+        } else {
+            alert('Erreur: ' + (data.error || 'Erreur inconnue'));
+        }
+    })
+    .catch(error => {
+        alert('Erreur lors de la modification: ' + error);
+    });
+}
+
+// ========== SÉLECTION PATIENT ==========
 function selectPatient(id, nom, assurance, taux) {
-    // Stocker les données du patient
+    if (!id || id === 'undefined') {
+        alert('Erreur: ID patient invalide');
+        return;
+    }
+    
+    // Stocker les données (assurance garde sa valeur personnalisée)
     sessionStorage.setItem('selectedPatientId', id);
     sessionStorage.setItem('selectedPatientName', nom);
-    sessionStorage.setItem('selectedPatientAssurance', assurance);
+    sessionStorage.setItem('selectedPatientAssurance', assurance);  // ← GTA, CNPS, etc.
     sessionStorage.setItem('selectedPatientTaux', taux);
     
-    // Afficher un message de confirmation
     alert(`✅ Patient sélectionné : ${nom}\nAssurance : ${assurance}\nTaux : ${taux}%`);
     
-    // 🔥 PROPOSER LE CHOIX
     let choix = confirm(
-        "Où voulez-vous aller ?\n\n" +
-        "✅ OK → Vente d'actes médicaux\n" +
-        "❌ Annuler → Vente pharmacie"
+        "OK → Actes médicaux\n" +
+        "Annuler → Pharmacie"
     );
     
     if (choix) {
@@ -469,8 +591,47 @@ function selectPatient(id, nom, assurance, taux) {
     }
 }
 
-function editPatient(id) {
-    alert('Fonction de modification à venir');
+// ========== ENVOI LIEN WHATSAPP ==========
+function envoyerLienPatient(id, nom, telephone) {
+    if (!id || id === 'undefined') {
+        alert('Erreur: ID patient invalide');
+        return;
+    }
+    
+    let tel = telephone.toString().replace(/\s/g, '').replace(/^\+/, '');
+    if (!tel.match(/^(228|229|221)/)) {
+        tel = '228' + tel;
+    }
+    
+    let token = btoa(`${id}_${Date.now()}`);
+    let lien = `${window.location.origin}/patient/rendez_vous/${id}/${token}`;
+    
+    fetch('/api/structure/nom')
+        .then(response => response.json())
+        .then(data => {
+            let structureNom = data.nom || 'Notre établissement';
+            let message = `🏥 *${structureNom}*%0A%0A`;
+            message += `Bonjour *${nom}*,%0A%0A`;
+            message += `Voici votre lien pour consulter vos rendez-vous :%0A${lien}%0A%0A`;
+            message += `🔒 Ce lien est personnel et sécurisé.%0A%0A`;
+            message += `📞 Pour modifier ou annuler, veuillez nous contacter.`;
+            
+            window.open(`https://wa.me/${tel}?text=${message}`, '_blank');
+        })
+        .catch(error => {
+            alert('Erreur lors de l\'envoi');
+        });
+}
+function chargerPatients() {
+    showLoader();
+    
+    fetch('/api/patients')
+        .then(response => response.json())
+        .then(data => {
+            // Afficher les patients
+            hideLoader();
+        })
+        .catch(() => hideLoader());
 }
 </script>
 {% endblock %}

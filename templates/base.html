@@ -289,88 +289,115 @@
                 size: A4;
             }
         }
-           /* Pour les assurances personnalisées */
-.badge.bg-info {
-    background-color: #17a2b8 !important;
-}
-.badge.bg-success {
-    background-color: #28a745 !important;
-}
-.badge.bg-primary {
-    background-color: #007bff !important;
-}
-.badge.bg-secondary {
-    background-color: #6c757d !important;
-}
-
-@media print {
-    @page {
-        margin: 5mm;
-    }
-    body, .container, .card, .card-body {
-        height: auto !important;
-        min-height: 0 !important;
-        margin: 0 !important;
-        padding: 2mm !important;
-    }
-    table, tr, td, th {
-        padding: 1mm !important;
-    }
-    body, p, td, th, div, span {
-        font-size: 9pt !important;
-        line-height: 1.3 !important;
-    }
-    h1, h2, h3, h4 {
-        font-size: 11pt !important;
-        margin: 1mm 0 !important;
-    }
-}
+        
+        /* Pour les assurances personnalisées */
+        .badge.bg-info {
+            background-color: #17a2b8 !important;
+        }
+        .badge.bg-success {
+            background-color: #28a745 !important;
+        }
+        .badge.bg-primary {
+            background-color: #007bff !important;
+        }
+        .badge.bg-secondary {
+            background-color: #6c757d !important;
+        }
+        
+        /* Styles impression facture */
+        @media print {
+            @page {
+                margin: 5mm;
+            }
+            body, .container, .card, .card-body {
+                height: auto !important;
+                min-height: 0 !important;
+                margin: 0 !important;
+                padding: 2mm !important;
+            }
+            table, tr, td, th {
+                padding: 1mm !important;
+            }
+            body, p, td, th, div, span {
+                font-size: 9pt !important;
+                line-height: 1.3 !important;
+            }
+            h1, h2, h3, h4 {
+                font-size: 11pt !important;
+                margin: 1mm 0 !important;
+            }
+        }
+        
+        /* Loader spinner */
+        .loader-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .loader {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
     {% block extra_css %}{% endblock %}
 </head>
 <body>
-
     <!-- Navbar moderne -->
     <nav class="navbar navbar-expand-lg">
-    <div class="container">
-        <a class="navbar-brand" href="{{ url_for('dashboard' if session.user_id else 'index') }}">
-            <i class="fas fa-heartbeat"></i> Medilogic<span style="color: #667eea;">-GHP</span>
-        </a>
-        {% if session.user_id %}
-        <div class="ms-auto d-flex align-items-center gap-3">
-            <!-- Horloge temps réel -->
-            <div class="d-none d-md-block" style="background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); padding: 8px 18px; border-radius: 40px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
-                <div id="horloge" class="d-flex align-items-center gap-2">
-                    <i class="fas fa-calendar-alt text-primary"></i>
-                    <span id="dateActuelle" style="font-size: 13px; font-weight: 500; color: #4a5568;"></span>
-                    <i class="fas fa-clock text-primary ms-1"></i>
-                    <span id="heureActuelle" style="font-size: 13px; font-weight: 700; background: linear-gradient(135deg, #667eea, #764ba2); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;"></span>
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('dashboard' if session.user_id else 'index') }}">
+                <i class="fas fa-heartbeat"></i> Medilogic<span style="color: #667eea;">-GHP</span>
+            </a>
+            {% if session.user_id %}
+            <div class="ms-auto d-flex align-items-center gap-3">
+                <!-- Horloge temps réel -->
+                <div class="d-none d-md-block" style="background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); padding: 8px 18px; border-radius: 40px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+                    <div id="horloge" class="d-flex align-items-center gap-2">
+                        <i class="fas fa-calendar-alt text-primary"></i>
+                        <span id="dateActuelle" style="font-size: 13px; font-weight: 500; color: #4a5568;"></span>
+                        <i class="fas fa-clock text-primary ms-1"></i>
+                        <span id="heureActuelle" style="font-size: 13px; font-weight: 700; background: linear-gradient(135deg, #667eea, #764ba2); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;"></span>
+                    </div>
+                </div>
+                
+                <!-- Version mobile simplifiée -->
+                <div class="d-md-none">
+                    <div id="horlogeMobile" style="background: #f8f9fa; padding: 5px 12px; border-radius: 30px;">
+                        <span id="heureMobile" style="font-size: 12px; font-weight: 600; color: #667eea;"></span>
+                    </div>
+                </div>
+                
+                <div class="dropdown">
+                    <button class="btn btn-light rounded-pill dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                        <i class="fas fa-user-circle"></i> {{ session.user_name|default('Utilisateur') }}
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item" href="{{ url_for('dashboard') }}"><i class="fas fa-tachometer-alt"></i> Tableau de bord</a></li>
+                        <li><a class="dropdown-item" href="{{ url_for('historique_ventes') }}"><i class="fas fa-history"></i> Historique</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="{{ url_for('rendez_vous') }}"><i class="fas fa-calendar-alt"></i> Rendez-vous</a></li>
+                        <li><a class="dropdown-item text-danger" href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i> Déconnexion</a></li>
+                    </ul>
                 </div>
             </div>
-            
-            <!-- Version mobile simplifiée -->
-            <div class="d-md-none">
-                <div id="horlogeMobile" style="background: #f8f9fa; padding: 5px 12px; border-radius: 30px;">
-                    <span id="heureMobile" style="font-size: 12px; font-weight: 600; color: #667eea;"></span>
-                </div>
-            </div>
-            
-            <div class="dropdown">
-                <button class="btn btn-light rounded-pill dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                    <i class="fas fa-user-circle"></i> {{ session.user_name|default('Utilisateur') }}
-                </button>
-                <ul class="dropdown-menu dropdown-menu-end">
-                    <li><a class="dropdown-item" href="{{ url_for('dashboard') }}"><i class="fas fa-tachometer-alt"></i> Tableau de bord</a></li>
-                    <li><a class="dropdown-item" href="{{ url_for('historique_ventes') }}"><i class="fas fa-history"></i> Historique</a></li>
-                    <li><hr class="dropdown-divider"></li>
-                    <li><a class="dropdown-item" href="{{ url_for('rendez_vous') }}"><i class="fas fa-calendar-alt"></i> Rendez-vous</a></li>
-                    <li><a class="dropdown-item text-danger" href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i> Déconnexion</a></li>
-                </ul>
-            </div>
+            {% endif %}
         </div>
-        {% endif %}
-    </div>
-</nav>
+    </nav>
 
     <!-- BANDEAU PATIENT SÉLECTIONNÉ -->
     {% if session.user_id %}
@@ -397,146 +424,151 @@
     </div>
     
     <script>
-// Horloge temps réel
-function updateHorloge() {
-    const maintenant = new Date();
-    const jours = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
-    const mois = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
-    const jourSemaine = jours[maintenant.getDay()];
-    const moisNom = mois[maintenant.getMonth()];
-    const jour = maintenant.getDate();
-    const annee = maintenant.getFullYear();
-    const dateFormatee = `${jourSemaine} ${jour} ${moisNom} ${annee}`;
-    
-    let heures = maintenant.getHours();
-    let minutes = maintenant.getMinutes();
-    let secondes = maintenant.getSeconds();
-    heures = heures < 10 ? '0' + heures : heures;
-    minutes = minutes < 10 ? '0' + minutes : minutes;
-    secondes = secondes < 10 ? '0' + secondes : secondes;
-    const heureFormatee = `${heures}:${minutes}:${secondes}`;
-    
-    const dateElement = document.getElementById('dateActuelle');
-    const heureElement = document.getElementById('heureActuelle');
-    const heureMobile = document.getElementById('heureMobile');
-    
-    if (dateElement) dateElement.textContent = dateFormatee;
-    if (heureElement) heureElement.textContent = heureFormatee;
-    if (heureMobile) heureMobile.textContent = `${heures}:${minutes}`;
-}
-
-setInterval(updateHorloge, 1000);
-updateHorloge();
-
-// Stocker les infos de la structure
-{% if session.structure_nom %}
-localStorage.setItem('structureNom', '{{ session.structure_nom }}');
-{% endif %}
-{% if session.structure_id %}
-localStorage.setItem('structureId', '{{ session.structure_id }}');
-{% endif %}
-
-// Stocker les infos de la structure
-{% if session.structure_nom %}
-localStorage.setItem('structureNom', '{{ session.structure_nom }}');
-{% endif %}
-{% if session.structure_telephone %}
-localStorage.setItem('structureTelephone', '{{ session.structure_telephone }}');
-{% endif %}
-
-// Récupérer le nom de la structure
-function getStructureNom(callback) {
-    let nom = localStorage.getItem('structureNom');
-    if (nom) {
-        callback(nom);
-        return;
-    }
-    fetch('/api/structure/nom')
-        .then(response => response.json())
-        .then(data => {
-            let nom = data.nom || 'Notre établissement';
-            localStorage.setItem('structureNom', nom);
-            callback(nom);
-        })
-        .catch(() => callback('Notre établissement'));
-}
-
-// Charger les infos de la structure au démarrage
-function chargerInfosStructure() {
-    fetch('/api/structure/infos')
-        .then(response => response.json())
-        .then(data => {
-            if (data.nom) localStorage.setItem('structureNom', data.nom);
-            if (data.telephone) localStorage.setItem('structureTelephone', data.telephone);
-            console.log('📞 Téléphone chargé:', data.telephone);
-        })
-        .catch(err => console.error('Erreur chargement infos structure:', err));
-}
-
-// Appeler au chargement de la page
-if (window.location.pathname !== '/login' && window.location.pathname !== '/') {
-    chargerInfosStructure();
-}
-
-// Chargement du patient sélectionné
-function loadSelectedPatient() {
-    let patientId = sessionStorage.getItem('selectedPatientId');
-    let patientName = sessionStorage.getItem('selectedPatientName');
-    let assurance = sessionStorage.getItem('selectedPatientAssurance');
-    let taux = sessionStorage.getItem('selectedPatientTaux');
-    
-    if (!patientId || patientId === 'null' || patientId === 'undefined') {
-        patientId = localStorage.getItem('selectedPatientId');
-        patientName = localStorage.getItem('selectedPatientName');
-        assurance = localStorage.getItem('selectedPatientAssurance');
-        taux = localStorage.getItem('selectedPatientTaux');
-    }
-    
-    if (patientId && patientId !== 'null' && patientId !== 'undefined') {
-        let badge = document.getElementById('selectedPatientBadge');
-        if (badge) badge.style.display = 'block';
-        let nameSpan = document.getElementById('currentPatientName');
-        if (nameSpan) nameSpan.innerText = patientName || 'Patient';
+    // Horloge temps réel
+    function updateHorloge() {
+        const maintenant = new Date();
+        const jours = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+        const mois = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+        const jourSemaine = jours[maintenant.getDay()];
+        const moisNom = mois[maintenant.getMonth()];
+        const jour = maintenant.getDate();
+        const annee = maintenant.getFullYear();
+        const dateFormatee = `${jourSemaine} ${jour} ${moisNom} ${annee}`;
         
-        let assuranceText = 'Non assuré';
-        if (assurance === 'amu_cnss') {
-            assuranceText = 'AMU-CNSS';
-        } else if (assurance === 'amu_inam') {
-            assuranceText = 'AMU-INAM';
-        } else if (assurance === 'autre') {
-            assuranceText = 'Autre assurance';
-        } else if (assurance && assurance !== 'non_assure' && assurance !== 'null') {
-            assuranceText = assurance;
+        let heures = maintenant.getHours();
+        let minutes = maintenant.getMinutes();
+        let secondes = maintenant.getSeconds();
+        heures = heures < 10 ? '0' + heures : heures;
+        minutes = minutes < 10 ? '0' + minutes : minutes;
+        secondes = secondes < 10 ? '0' + secondes : secondes;
+        const heureFormatee = `${heures}:${minutes}:${secondes}`;
+        
+        const dateElement = document.getElementById('dateActuelle');
+        const heureElement = document.getElementById('heureActuelle');
+        const heureMobile = document.getElementById('heureMobile');
+        
+        if (dateElement) dateElement.textContent = dateFormatee;
+        if (heureElement) heureElement.textContent = heureFormatee;
+        if (heureMobile) heureMobile.textContent = `${heures}:${minutes}`;
+    }
+    
+    setInterval(updateHorloge, 1000);
+    updateHorloge();
+    
+    // Stocker les infos de la structure
+    {% if session.structure_nom %}
+    localStorage.setItem('structureNom', '{{ session.structure_nom }}');
+    {% endif %}
+    {% if session.structure_id %}
+    localStorage.setItem('structureId', '{{ session.structure_id }}');
+    {% endif %}
+    {% if session.structure_telephone %}
+    localStorage.setItem('structureTelephone', '{{ session.structure_telephone }}');
+    {% endif %}
+    
+    // Récupérer le nom de la structure
+    function getStructureNom(callback) {
+        let nom = localStorage.getItem('structureNom');
+        if (nom) {
+            callback(nom);
+            return;
+        }
+        fetch('/api/structure/nom')
+            .then(response => response.json())
+            .then(data => {
+                let nom = data.nom || 'Notre établissement';
+                localStorage.setItem('structureNom', nom);
+                callback(nom);
+            })
+            .catch(() => callback('Notre établissement'));
+    }
+    
+    // Charger les infos de la structure au démarrage
+    function chargerInfosStructure() {
+        fetch('/api/structure/infos')
+            .then(response => response.json())
+            .then(data => {
+                if (data.nom) localStorage.setItem('structureNom', data.nom);
+                if (data.telephone) localStorage.setItem('structureTelephone', data.telephone);
+                console.log('📞 Téléphone chargé:', data.telephone);
+            })
+            .catch(err => console.error('Erreur chargement infos structure:', err));
+    }
+    
+    // Appeler au chargement de la page
+    if (window.location.pathname !== '/login' && window.location.pathname !== '/') {
+        chargerInfosStructure();
+    }
+    
+    // Chargement du patient sélectionné
+    function loadSelectedPatient() {
+        let patientId = sessionStorage.getItem('selectedPatientId');
+        let patientName = sessionStorage.getItem('selectedPatientName');
+        let assurance = sessionStorage.getItem('selectedPatientAssurance');
+        let taux = sessionStorage.getItem('selectedPatientTaux');
+        
+        if (!patientId || patientId === 'null' || patientId === 'undefined') {
+            patientId = localStorage.getItem('selectedPatientId');
+            patientName = localStorage.getItem('selectedPatientName');
+            assurance = localStorage.getItem('selectedPatientAssurance');
+            taux = localStorage.getItem('selectedPatientTaux');
         }
         
-        let assuranceSpan = document.getElementById('currentPatientAssurance');
-        if (assuranceSpan) assuranceSpan.innerText = assuranceText;
-        
-        let tauxSpan = document.getElementById('currentPatientTaux');
-        if (tauxSpan) tauxSpan.innerText = (taux || 0) + '%';
-    } else {
+        if (patientId && patientId !== 'null' && patientId !== 'undefined') {
+            let badge = document.getElementById('selectedPatientBadge');
+            if (badge) badge.style.display = 'block';
+            let nameSpan = document.getElementById('currentPatientName');
+            if (nameSpan) nameSpan.innerText = patientName || 'Patient';
+            
+            let assuranceText = 'Non assuré';
+            if (assurance === 'amu_cnss') {
+                assuranceText = 'AMU-CNSS';
+            } else if (assurance === 'amu_inam') {
+                assuranceText = 'AMU-INAM';
+            } else if (assurance === 'autre') {
+                assuranceText = 'Autre assurance';
+            } else if (assurance && assurance !== 'non_assure' && assurance !== 'null') {
+                assuranceText = assurance;
+            }
+            
+            let assuranceSpan = document.getElementById('currentPatientAssurance');
+            if (assuranceSpan) assuranceSpan.innerText = assuranceText;
+            
+            let tauxSpan = document.getElementById('currentPatientTaux');
+            if (tauxSpan) tauxSpan.innerText = (taux || 0) + '%';
+        } else {
+            let badge = document.getElementById('selectedPatientBadge');
+            if (badge) badge.style.display = 'none';
+        }
+    }
+    
+    function clearSelectedPatient() {
+        sessionStorage.removeItem('selectedPatientId');
+        sessionStorage.removeItem('selectedPatientName');
+        sessionStorage.removeItem('selectedPatientAssurance');
+        sessionStorage.removeItem('selectedPatientTaux');
+        localStorage.removeItem('selectedPatientId');
+        localStorage.removeItem('selectedPatientName');
+        localStorage.removeItem('selectedPatientAssurance');
+        localStorage.removeItem('selectedPatientTaux');
         let badge = document.getElementById('selectedPatientBadge');
         if (badge) badge.style.display = 'none';
+        location.reload();
     }
-}
-
-function clearSelectedPatient() {
-    sessionStorage.removeItem('selectedPatientId');
-    sessionStorage.removeItem('selectedPatientName');
-    sessionStorage.removeItem('selectedPatientAssurance');
-    sessionStorage.removeItem('selectedPatientTaux');
-    localStorage.removeItem('selectedPatientId');
-    localStorage.removeItem('selectedPatientName');
-    localStorage.removeItem('selectedPatientAssurance');
-    localStorage.removeItem('selectedPatientTaux');
-    let badge = document.getElementById('selectedPatientBadge');
-    if (badge) badge.style.display = 'none';
-    location.reload();
-}
-
-document.addEventListener('DOMContentLoaded', loadSelectedPatient);
-</script>
-
+    
+    document.addEventListener('DOMContentLoaded', loadSelectedPatient);
+    
+    // Loader functions
+    function showLoader() {
+        const loader = document.getElementById('loaderOverlay');
+        if (loader) loader.style.display = 'flex';
+    }
+    
+    function hideLoader() {
+        const loader = document.getElementById('loaderOverlay');
+        if (loader) loader.style.display = 'none';
+    }
+    </script>
     {% endif %}
 
     <div class="container mt-4">
@@ -553,6 +585,10 @@ document.addEventListener('DOMContentLoaded', loadSelectedPatient);
         {% endwith %}
 
         {% block content %}{% endblock %}
+    </div>
+
+    <div class="loader-overlay" id="loaderOverlay" style="display: none;">
+        <div class="loader"></div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>

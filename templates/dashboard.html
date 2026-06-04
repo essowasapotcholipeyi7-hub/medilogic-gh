@@ -251,5 +251,19 @@ function printDocument(action) {
     window.open(url, '_blank');
     bootstrap.Modal.getInstance(document.getElementById('printModal')).hide();
 }
+
+// Au début du chargement
+showLoader();
+
+// Récupérer les données
+Promise.all([
+    fetch('/api/patients').then(r => r.json()),
+    fetch('/api/ventes').then(r => r.json()),
+    fetch('/api/actes').then(r => r.json())
+]).then(() => {
+    hideLoader();
+}).catch(() => {
+    hideLoader();
+});
 </script>
 {% endblock %}

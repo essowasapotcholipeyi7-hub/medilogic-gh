@@ -27,6 +27,11 @@
                 </button>
             </li>
             <li class="nav-item" role="presentation">
+                <button class="nav-link" id="import-tab" data-bs-toggle="tab" data-bs-target="#import" type="button" role="tab">
+                    <i class="fas fa-file-excel"></i> Import Excel
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
                 <button class="nav-link" id="structure-tab" data-bs-toggle="tab" data-bs-target="#structure" type="button" role="tab">
                     <i class="fas fa-building"></i> Ma structure
                 </button>
@@ -221,6 +226,58 @@
                 </div>
             </div>
 
+<!-- ========== ONGLET IMPORT EXCEL ========== -->
+<div class="tab-pane fade" id="import" role="tabpanel">
+    <div class="card">
+        <div class="card-header bg-warning text-white">
+            <h5><i class="fas fa-file-excel"></i> Importation depuis Excel</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <!-- Import Actes -->
+                <div class="col-md-6">
+                    <div class="card border-primary mb-3">
+                        <div class="card-header bg-primary text-white">
+                            <i class="fas fa-stethoscope"></i> Actes médicaux
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted">Format attendu : code, nom, prix, description</p>
+                            <input type="file" id="fileActes" class="form-control mb-2" accept=".xlsx, .xls, .csv">
+                            <button class="btn btn-primary w-100" onclick="importerActes()">
+                                <i class="fas fa-upload"></i> Importer les actes
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Import Produits -->
+                <div class="col-md-6">
+                    <div class="card border-success mb-3">
+                        <div class="card-header bg-success text-white">
+                            <i class="fas fa-pills"></i> Produits pharmacie
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted">Format attendu : code, nom, prix, stock</p>
+                            <input type="file" id="fileProduits" class="form-control mb-2" accept=".xlsx, .xls, .csv">
+                            <button class="btn btn-success w-100" onclick="importerProduits()">
+                                <i class="fas fa-upload"></i> Importer les produits
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Barre de progression -->
+            <div id="importProgress" style="display:none;" class="mt-3">
+                <div class="progress">
+                    <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" 
+                         style="width: 0%">0%</div>
+                </div>
+                <p id="progressMessage" class="mt-2 text-muted"></p>
+            </div>
+        </div>
+    </div>
+</div>
             <!-- ========== ONGLET MA STRUCTURE ========== -->
             <div class="tab-pane fade" id="structure" role="tabpanel">
                 <div class="card">
@@ -612,5 +669,79 @@ document.getElementById('structureForm').addEventListener('submit', function(e) 
         }
     });
 });
+
+function importerActes() {
+    const file = document.getElementById('fileActes').files[0];
+    if (!file) {
+        alert('Veuillez sélectionner un fichier Excel');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    document.getElementById('importProgress').style.display = 'block';
+    document.getElementById('progressBar').style.width = '30%';
+    document.getElementById('progressBar').innerHTML = '30%';
+    document.getElementById('progressMessage').innerHTML = 'Importation des actes en cours...';
+    
+    fetch('/api/import/actes', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById('progressBar').style.width = '100%';
+        document.getElementById('progressBar').innerHTML = '100%';
+        document.getElementById('progressMessage').innerHTML = data.message;
+        
+        setTimeout(() => {
+            document.getElementById('importProgress').style.display = 'none';
+            alert(data.message);
+            location.reload();
+        }, 2000);
+    })
+    .catch(error => {
+        document.getElementById('progressMessage').innerHTML = 'Erreur: ' + error;
+        alert('Erreur lors de l\'importation');
+    });
+}
+
+function importerProduits() {
+    const file = document.getElementById('fileProduits').files[0];
+    if (!file) {
+        alert('Veuillez sélectionner un fichier Excel');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    document.getElementById('importProgress').style.display = 'block';
+    document.getElementById('progressBar').style.width = '30%';
+    document.getElementById('progressBar').innerHTML = '30%';
+    document.getElementById('progressMessage').innerHTML = 'Importation des produits en cours...';
+    
+    fetch('/api/import/produits', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById('progressBar').style.width = '100%';
+        document.getElementById('progressBar').innerHTML = '100%';
+        document.getElementById('progressMessage').innerHTML = data.message;
+        
+        setTimeout(() => {
+            document.getElementById('importProgress').style.display = 'none';
+            alert(data.message);
+            location.reload();
+        }, 2000);
+    })
+    .catch(error => {
+        document.getElementById('progressMessage').innerHTML = 'Erreur: ' + error;
+        alert('Erreur lors de l\'importation');
+    });
+}
 </script>
 {% endblock %}

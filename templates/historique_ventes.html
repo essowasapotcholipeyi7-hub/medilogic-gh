@@ -645,6 +645,17 @@ function imprimerStats() {
     printWindow.document.close();
 }
 
+function chargerHistorique() {
+    showLoader();
+    
+    Promise.all([
+        fetch('/api/ventes/actes').then(r => r.json()),
+        fetch('/api/ventes/pharma').then(r => r.json())
+    ]).then(([actes, pharma]) => {
+        // Afficher l'historique
+        hideLoader();
+    }).catch(() => hideLoader());
+}
 // ========== INITIALISATION ==========
 document.addEventListener('DOMContentLoaded', function() {
     changerPeriodeStats('tous');
