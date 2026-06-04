@@ -2190,6 +2190,14 @@ def test_db():
             return jsonify({'status': 'error', 'message': 'Pas de résultat'})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)})
+@app.route('/debug_db')
+def debug_db():
+    try:
+        # Tester la connexion
+        result = db.execute_query("SELECT 1 as test")
+        return jsonify({'status': 'ok', 'result': result})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
 
 if __name__ == '__main__':
     # Récupère le port depuis la variable d'environnement ou utilise 5000 par défaut
