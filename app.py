@@ -561,50 +561,16 @@ def check_sheets():
     except Exception as e:
         return jsonify({'error': str(e)})
 
-@app.route('/api/ventes/actes', methods=['POST'])
-@login_required
-def api_add_acte_vente():
-    try:
-        data = request.json
-        
-        ventes = sheets_helper.get_all_records('ventes_actes')
-        new_id = get_next_id(ventes, 'ID')
-        
-        structure_id = session.get('structure_id')
-        date_now = datetime.now().isoformat()
-        
-        # 🔥 Utilisation du BATCH pour tout envoyer en une fois
-        for acte in data.get('actes', []):
-            new_vente = [
-                new_id, data.get('patient_id'), data.get('patient_nom'),
-                acte.get('id'), acte.get('nom'), acte.get('prix'),
-                acte.get('quantite'), acte.get('total'),
-                data.get('taux_assurance', 0), data.get('prise_en_charge', 0),
-                data.get('net_a_payer', 0), data.get('mode_paiement', 'especes'),
-                date_now, structure_id
-            ]
-            sheets_helper.add_batch('ventes_actes', new_vente)  # ← Ajouter au lot
-        
-        # 🔥 Exécuter tout le lot
-        sheets_helper.execute_batch()
-        
-        return jsonify({'success': True, 'vente_id': new_id})
-        
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
 @app.route('/actes_vente')
 @login_required
 def actes_vente():
+    # 🔥 Lire depuis Google Sheets (pas Neon)
     actes = sheets_helper.get_all_records('actes')
     patients = sheets_helper.get_all_records('patients')
     
-    print(f"🔍 Actes trouvés: {len(actes)}")  # Debug
-    for a in actes:
-        print(f"   - {a.get('nom')}: {a.get('prix')} FCFA")
+    print(f"🔍 Actes trouvés dans Sheets: {len(actes)}")
     
     return render_template('actes_vente.html', actes=actes, patients=patients)
-
 @app.route('/pharma_vente')
 @login_required
 def pharma_vente():
@@ -624,54 +590,63 @@ def api_add_pharma_vente():
         data = request.json
         print("📦 Données reçues pharma:", data)
         
-        ventes = sheets_helper.get_all_records('ventes_pharma')
-        new_id = get_next_id(ventes, 'ID')
-        
         structure_id = session.get('structure_id')
-        date_now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        date_now = datetime.now().isoformat()
         
-        enregistres = 0
+        # 🔥 1. Enregistrer la vente dans Neon
+        result = db.execute_query("""
+            INSERT INTO ventes (structure_id, patient_id, patient_nom, type, produits,
+                                sous_total, prise_en_charge, net_a_payer, mode_paiement, taux_assurance, date_vente)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+        """, (
+            structure_id,
+            data.get('patient_id'),
+            data.get('patient_nom'),
+            'pharma',
+            json.dumps(data.get('produits')),  # Stocker les produits en JSON
+            data.get('sous_total'),
+            data.get('prise_en_charge'),
+            data.get('net_a_payer'),
+            data.get('mode_paiement'),
+            data.get('taux_assurance'),
+            date_now
+        ))
+        
+        if not result:
+            return jsonify({'success': False, 'error': 'Erreur insertion vente'}), 500
+        
+        new_id = result[0]['id']
+        
+        # 🔥 2. Mettre à jour les stocks dans Neon
         for produit in data.get('produits', []):
-            new_vente = [
-                new_id,                                    # ID
-                data.get('patient_id'),                    # patient_id
-                data.get('patient_nom'),                   # patient_nom
-                produit.get('id'),                         # produit_id
-                produit.get('nom'),                        # produit_nom
-                produit.get('prix'),                       # prix
-                produit.get('quantite'),                   # quantite
-                produit.get('total'),                      # total
-                data.get('taux_assurance', 0),             # taux_assurance
-                data.get('prise_en_charge', 0),            # prise_en_charge
-                data.get('net_a_payer', 0),                # net_a_payer
-                data.get('mode_paiement', 'especes'),      # mode_paiement
-                str(data.get('avec_ordonnance', False)),   # avec_ordonnance
-                date_now,                                  # date
-                structure_id                               # structure_id
-            ]
-            sheets_helper.add_record('ventes_pharma', new_vente)
-            enregistres += 1
-            print(f"✅ Produit enregistré: {produit.get('nom')}")
+            db.execute_query("""
+                UPDATE produits 
+                SET quantite_stock = quantite_stock - %s,
+                    updated_at = NOW()
+                WHERE id = %s AND structure_id = %s
+            """, (produit.get('quantite'), produit.get('id'), structure_id))
+            print(f"📦 Stock mis à jour: {produit.get('nom')} - {produit.get('quantite')} unités vendues")
         
-        print(f"📊 {enregistres} produits enregistrés pour la vente ID {new_id}")
+        print(f"✅ Vente enregistrée avec ID: {new_id}")
         
         return jsonify({'success': True, 'vente_id': new_id})
         
     except Exception as e:
         print(f"❌ Erreur: {e}")
-        import traceback
-        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/facture/<int:vente_id>/<string:type>')
 @login_required
 def facture(vente_id, type):
     from datetime import datetime
+    import json
     
     structure_id = session.get('structure_id')
+    
+    # Récupérer les infos de la structure depuis Google Sheets
     structures = sheets_helper.get_all_records('structures', use_prefix=False)
-    structure_info = next((s for s in structures if s.get('ID') == structure_id), {})
-    patients = sheets_helper.get_all_records('patients')
+    structure_info = next((s for s in structures if str(s.get('ID')) == str(structure_id)), {})
     
     articles = []
     sous_total = 0
@@ -684,55 +659,100 @@ def facture(vente_id, type):
     numero_assure = ''
     patient_id = None
     
-    if type == 'actes':
-        ventes = sheets_helper.get_all_records('ventes_actes')
-        for v in ventes:
-            if v.get('ID') == vente_id:
-                total = float(v.get('total', 0))
-                sous_total += total
-                articles.append({
-                    'nom': v.get('acte_nom', 'Acte'),
-                    'quantite': int(v.get('quantite', 1)),
-                    'prix_unitaire': float(v.get('prix', 0)),
-                    'total': total
-                })
-                patient_nom = v.get('patient_nom', 'Patient')
-                mode_paiement = v.get('mode_paiement', 'Espèces')
-                taux_assurance = float(v.get('taux_assurance', 0))
-                prise_en_charge = float(v.get('prise_en_charge', 0))
-                net_a_payer = float(v.get('net_a_payer', 0))
-                patient_id = v.get('patient_id')
-        
-        if patient_id:
-            patient_info = next((p for p in patients if str(p.get('ID')) == str(patient_id)), {})
-            type_assurance = patient_info.get('type_assurance', 'non_assure')
-            numero_assure = patient_info.get('numero_assure', '')
+    # 🔥 Lire depuis NEON
+    vente = db.execute_query("""
+        SELECT v.*, p.nom, p.prenom, p.type_assurance, p.numero_assure
+        FROM ventes v
+        LEFT JOIN patients p ON v.patient_id = p.id
+        WHERE v.id = %s AND v.structure_id = %s AND v.type = %s
+    """, (vente_id, structure_id, type))
     
+    if not vente or len(vente) == 0:
+        return f"Vente {vente_id} non trouvée", 404
+    
+    if isinstance(vente[0], dict):
+        v = vente[0]
+        patient_nom = v.get('patient_nom', '')
+        if not patient_nom:
+            patient_nom = f"{v.get('nom', '')} {v.get('prenom', '')}".strip()
+        if not patient_nom:
+            patient_nom = 'Patient'
+        
+        patient_id = v.get('patient_id')
+        mode_paiement = v.get('mode_paiement', 'Espèces')
+        taux_assurance = float(v.get('taux_assurance', 0))
+        prise_en_charge = float(v.get('prise_en_charge', 0))
+        net_a_payer = float(v.get('net_a_payer', 0))
+        sous_total = float(v.get('sous_total', 0))
+        type_assurance = v.get('type_assurance', 'non_assure')
+        numero_assure = v.get('numero_assure', '')
+        
+        # Récupérer les articles avec prix unitaire
+        if type == 'actes':
+            actes_data = v.get('actes', [])
+            if isinstance(actes_data, str):
+                actes_data = json.loads(actes_data)
+            for a in actes_data:
+                articles.append({
+                    'nom': a.get('nom', 'Acte'),
+                    'quantite': int(a.get('quantite', 1)),
+                    'prix_unitaire': float(a.get('prix', 0)),
+                    'total': float(a.get('total', 0))
+                })
+        else:  # pharmacie
+            produits_data = v.get('produits', [])
+            if isinstance(produits_data, str):
+                produits_data = json.loads(produits_data)
+            for p in produits_data:
+                articles.append({
+                    'nom': p.get('nom', 'Produit'),
+                    'quantite': int(p.get('quantite', 1)),
+                    'prix_unitaire': float(p.get('prix_reel', p.get('prix', 0))),
+                    'total': float(p.get('total', 0))
+                })
     else:
-        ventes = sheets_helper.get_all_records('ventes_pharma')
-        for v in ventes:
-            if v.get('ID') == vente_id:
-                total = float(v.get('total', 0))
-                sous_total += total
-                articles.append({
-                    'nom': v.get('produit_nom', 'Produit'),
-                    'quantite': int(v.get('quantite', 1)),
-                    'prix_unitaire': float(v.get('prix', 0)),
-                    'total': total
-                })
-                patient_nom = v.get('patient_nom', 'Patient')
-                mode_paiement = v.get('mode_paiement', 'Espèces')
-                taux_assurance = float(v.get('taux_assurance', 0))
-                prise_en_charge = float(v.get('prise_en_charge', 0))
-                net_a_payer = float(v.get('net_a_payer', 0))
-                patient_id = v.get('patient_id')
+        # Format tuple
+        v = vente[0]
+        patient_nom = v[2] if len(v) > 2 and v[2] else ''
+        if not patient_nom and len(v) > 12:
+            patient_nom = f"{v[12] or ''} {v[13] or ''}".strip()
+        if not patient_nom:
+            patient_nom = 'Patient'
         
-        if patient_id:
-            patient_info = next((p for p in patients if str(p.get('ID')) == str(patient_id)), {})
-            type_assurance = patient_info.get('type_assurance', 'non_assure')
-            numero_assure = patient_info.get('numero_assure', '')
+        patient_id = v[1] if len(v) > 1 else None
+        mode_paiement = v[7] if len(v) > 7 else 'Espèces'
+        taux_assurance = float(v[10]) if len(v) > 10 else 0
+        prise_en_charge = float(v[5]) if len(v) > 5 else 0
+        net_a_payer = float(v[6]) if len(v) > 6 else 0
+        sous_total = float(v[4]) if len(v) > 4 else 0
+        type_assurance = v[14] if len(v) > 14 else 'non_assure'
+        numero_assure = v[15] if len(v) > 15 else ''
+        
+        # Récupérer les articles
+        if type == 'actes' and len(v) > 10:
+            actes_data = v[10]
+            if isinstance(actes_data, str):
+                actes_data = json.loads(actes_data)
+            for a in actes_data:
+                articles.append({
+                    'nom': a.get('nom', 'Acte'),
+                    'quantite': int(a.get('quantite', 1)),
+                    'prix_unitaire': float(a.get('prix', 0)),
+                    'total': float(a.get('total', 0))
+                })
+        elif type == 'pharmacie' and len(v) > 11:
+            produits_data = v[11]
+            if isinstance(produits_data, str):
+                produits_data = json.loads(produits_data)
+            for p in produits_data:
+                articles.append({
+                    'nom': p.get('nom', 'Produit'),
+                    'quantite': int(p.get('quantite', 1)),
+                    'prix_unitaire': float(p.get('prix_reel', p.get('prix', 0))),
+                    'total': float(p.get('total', 0))
+                })
     
-    # 🔥 GESTION DES ASSURANCES PERSONNALISÉES
+    # Gestion des assurances personnalisées
     assurance_text = 'Non assuré'
     if type_assurance == 'amu_cnss':
         assurance_text = 'AMU-CNSS'
@@ -742,13 +762,15 @@ def facture(vente_id, type):
         assurance_text = 'Autre assurance'
     elif type_assurance and type_assurance not in ['non_assure', 'amu_cnss', 'amu_inam', 'autre']:
         assurance_text = type_assurance
-
-    # 🔥 AJOUTER CETTE LIGNE - Générer un nom de fichier
+    
+    # Générer un nom de fichier
     patient_nom_clean = patient_nom.replace(' ', '_').replace("'", "").replace('é', 'e').replace('è', 'e').replace('ê', 'e').replace('à', 'a').replace('ç', 'c')
-    nom_fichier = f"archive_facture_{patient_nom_clean}_{vente_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    nom_fichier = f"facture_client_{patient_nom_clean}_{vente_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     structure_logo = structure_info.get('logo_url', '')
     nom_caissier = session.get('user_name', '')
-
+    
+    # 🔥 Récupérer l'email de la structure pour la facture
+    structure_email = structure_info.get('email', 'contact@medilogic.com')
     
     return render_template('facture_client.html',
                          vente_id=vente_id,
@@ -764,12 +786,11 @@ def facture(vente_id, type):
                          structure_nom=structure_info.get('nom', 'Medilogic-GHP'),
                          structure_adresse=structure_info.get('adresse', ''),
                          structure_telephone=structure_info.get('telephone', ''),
-                         structure_email=structure_info.get('email', ''),
+                         structure_email=structure_email,
                          date_actuelle=datetime.now().strftime('%d/%m/%Y %H:%M'),
                          nom_fichier=nom_fichier,
                          structure_logo=structure_logo,
                          nom_caissier=nom_caissier)
-
 
 @app.route('/admin_global')
 def admin_global():
@@ -883,12 +904,17 @@ def recu(vente_id, type):
     
     structure_id = session.get('structure_id')
     
-    # 🔥 Récupérer les infos de la structure (reste dans Sheets)
-    structures = sheets_helper.get_all_records('structures', use_prefix=False)
-    structure_info = next((s for s in structures if s.get('ID') == structure_id), {})
+    if not structure_id:
+        return "Structure non trouvée", 404
     
-    # 🔥 Récupérer les patients DEPUIS NEON
-    patients = db.execute_query("SELECT * FROM patients WHERE structure_id = %s", (structure_id,))
+    # Récupérer les infos de la structure depuis Google Sheets
+    structures = sheets_helper.get_all_records('structures', use_prefix=False)
+    structure_info = next((s for s in structures if str(s.get('ID')) == str(structure_id)), {})
+    
+    structure_nom = structure_info.get('nom', 'Medilogic-GHP')
+    structure_adresse = structure_info.get('adresse', '')
+    structure_telephone = structure_info.get('telephone', '')
+    structure_logo = structure_info.get('logo_url', '')
     
     articles = []
     sous_total = 0
@@ -901,60 +927,91 @@ def recu(vente_id, type):
     numero_assure = ''
     patient_id = None
     
-    if type == 'actes':
-        ventes = sheets_helper.get_all_records('ventes_actes')
-        for v in ventes:
-            if v.get('ID') == vente_id:
-                total = float(v.get('total', 0))
-                sous_total += total
-                articles.append({
-                    'nom': v.get('acte_nom', 'Acte'),
-                    'quantite': int(v.get('quantite', 1)),
-                    'prix_unitaire': float(v.get('prix', 0)),
-                    'total': total
-                })
-                patient_nom = v.get('patient_nom', 'Patient')
-                mode_paiement = v.get('mode_paiement', 'Espèces')
-                taux_assurance = float(v.get('taux_assurance', 0))
-                prise_en_charge = float(v.get('prise_en_charge', 0))
-                net_a_payer = float(v.get('net_a_payer', 0))
-                patient_id = v.get('patient_id')
-        
-        # 🔥 Chercher le patient dans Neon
-        if patient_id:
-            for p in patients:
-                if str(p.get('id')) == str(patient_id):
-                    type_assurance = p.get('type_assurance', 'non_assure')
-                    numero_assure = p.get('numero_assure', '')
-                    break
+    # 🔥 UNIQUEMENT depuis NEON pour les deux types
+    vente = db.execute_query("""
+        SELECT v.*, p.nom, p.prenom, p.type_assurance, p.numero_assure
+        FROM ventes v
+        JOIN patients p ON v.patient_id = p.id
+        WHERE v.id = %s AND v.structure_id = %s AND v.type = %s
+    """, (vente_id, structure_id, type))
     
-    else:  # pharmacie
-        ventes = sheets_helper.get_all_records('ventes_pharma')
-        for v in ventes:
-            if v.get('ID') == vente_id:
-                total = float(v.get('total', 0))
-                sous_total += total
-                articles.append({
-                    'nom': v.get('produit_nom', 'Produit'),
-                    'quantite': int(v.get('quantite', 1)),
-                    'prix_unitaire': float(v.get('prix', 0)),
-                    'total': total
-                })
-                patient_nom = v.get('patient_nom', 'Patient')
-                mode_paiement = v.get('mode_paiement', 'Espèces')
-                taux_assurance = float(v.get('taux_assurance', 0))
-                prise_en_charge = float(v.get('prise_en_charge', 0))
-                net_a_payer = float(v.get('net_a_payer', 0))
-                patient_id = v.get('patient_id')
-        
-        if patient_id:
-            for p in patients:
-                if str(p.get('id')) == str(patient_id):
-                    type_assurance = p.get('type_assurance', 'non_assure')
-                    numero_assure = p.get('numero_assure', '')
-                    break
+    if not vente or len(vente) == 0:
+        return f"Vente {vente_id} non trouvée", 404
     
-    # Gestion des assurances personnalisées
+    # Extraire les données
+    if isinstance(vente[0], dict):
+        v = vente[0]
+        patient_nom = f"{v.get('nom', '')} {v.get('prenom', '')}".strip()
+        patient_id = v.get('patient_id')
+        mode_paiement = v.get('mode_paiement', 'Espèces')
+        taux_assurance = float(v.get('taux_assurance', 0))
+        prise_en_charge = float(v.get('prise_en_charge', 0))
+        net_a_payer = float(v.get('net_a_payer', 0))
+        sous_total = float(v.get('sous_total', 0))
+        type_assurance = v.get('type_assurance', 'non_assure')
+        numero_assure = v.get('numero_assure', '')
+        
+        # Récupérer les articles selon le type
+        if type == 'actes':
+            actes_json = v.get('actes', [])
+            if isinstance(actes_json, str):
+                actes_json = json.loads(actes_json)
+            for a in actes_json:
+                articles.append({
+                    'nom': a.get('nom', 'Acte'),
+                    'quantite': int(a.get('quantite', 1)),
+                    'prix_unitaire': float(a.get('prix', 0)),
+                    'total': float(a.get('total', 0))
+                })
+        else:  # pharmacie
+            produits_json = v.get('produits', [])
+            if isinstance(produits_json, str):
+                produits_json = json.loads(produits_json)
+            for p in produits_json:
+                articles.append({
+                    'nom': p.get('nom', 'Produit'),
+                    'quantite': int(p.get('quantite', 1)),
+                    'prix_unitaire': float(p.get('prix_reel', p.get('prix', 0))),
+                    'total': float(p.get('total', 0))
+                })
+    else:
+        # Format tuple
+        v = vente[0]
+        patient_nom = f"{v[12]} {v[13]}".strip() if len(v) > 13 else 'Patient'
+        patient_id = v[1] if len(v) > 1 else None
+        mode_paiement = v[7] if len(v) > 7 else 'Espèces'
+        taux_assurance = float(v[10]) if len(v) > 10 else 0
+        prise_en_charge = float(v[5]) if len(v) > 5 else 0
+        net_a_payer = float(v[6]) if len(v) > 6 else 0
+        sous_total = float(v[4]) if len(v) > 4 else 0
+        type_assurance = v[14] if len(v) > 14 else 'non_assure'
+        numero_assure = v[15] if len(v) > 15 else ''
+        
+        # Récupérer les articles
+        if type == 'actes':
+            actes_json = v[11] if len(v) > 11 else []
+            if isinstance(actes_json, str):
+                actes_json = json.loads(actes_json)
+            for a in actes_json:
+                articles.append({
+                    'nom': a.get('nom', 'Acte'),
+                    'quantite': int(a.get('quantite', 1)),
+                    'prix_unitaire': float(a.get('prix', 0)),
+                    'total': float(a.get('total', 0))
+                })
+        else:
+            produits_json = v[8] if len(v) > 8 else []
+            if isinstance(produits_json, str):
+                produits_json = json.loads(produits_json)
+            for p in produits_json:
+                articles.append({
+                    'nom': p.get('nom', 'Produit'),
+                    'quantite': int(p.get('quantite', 1)),
+                    'prix_unitaire': float(p.get('prix_reel', p.get('prix', 0))),
+                    'total': float(p.get('total', 0))
+                })
+    
+    # Gestion des assurances
     assurance_text = type_assurance
     if type_assurance == 'amu_cnss':
         assurance_text = 'AMU-CNSS'
@@ -962,6 +1019,15 @@ def recu(vente_id, type):
         assurance_text = 'AMU-INAM'
     elif type_assurance == 'non_assure':
         assurance_text = 'Non assuré'
+    
+    print(f"=== REÇU {vente_id} ({type}) ===")
+    print(f"Patient: {patient_nom}")
+    print(f"Articles: {len(articles)}")
+    for a in articles:
+        print(f"  - {a['nom']}: {a['quantite']} x {a['prix_unitaire']} = {a['total']}")
+    print(f"Sous-total: {sous_total}")
+    print(f"Prise en charge: {prise_en_charge}")
+    print(f"Net à payer: {net_a_payer}")
     
     return render_template('recu_client.html',
                          vente_id=vente_id,
@@ -974,13 +1040,12 @@ def recu(vente_id, type):
                          type_assurance=assurance_text,
                          numero_assure=numero_assure,
                          mode_paiement=mode_paiement,
-                         structure_nom=structure_info.get('nom', 'Medilogic-GHP'),
-                         structure_adresse=structure_info.get('adresse', ''),
-                         structure_telephone=structure_info.get('telephone', ''),
+                         structure_nom=structure_nom,
+                         structure_adresse=structure_adresse,
+                         structure_telephone=structure_telephone,
                          date_actuelle=datetime.now().strftime('%d/%m/%Y %H:%M'),
-                         structure_logo=structure_info.get('logo_url', ''),
+                         structure_logo=structure_logo,
                          nom_caissier=session.get('user_name', ''))
-                       
 
 @app.route('/historique_ventes')
 @login_required
@@ -1127,49 +1192,75 @@ def api_delete_user(user_id):
 @app.route('/api/admin/actes', methods=['POST'])
 @login_required
 def api_add_acte():
-    data = request.json
-    actes = sheets_helper.get_all_records('actes')
-    
-    if data.get('id'):
-        # Modification
-        pass
-    else:
-        # Ajout
-        new_id = get_next_id(actes, 'ID')
-        new_acte = [
-            new_id,
-            data.get('nom'),
-            data.get('prix'),
-            data.get('description', ''),
-            session.get('structure_id')
-        ]
-        sheets_helper.add_record('actes', new_acte)
-    
-    return jsonify({'success': True})
+    """Ajouter ou modifier un acte dans Neon"""
+    try:
+        data = request.json
+        structure_id = session.get('structure_id')
+        
+        if not structure_id:
+            return jsonify({'success': False, 'error': 'Structure non trouvée'}), 400
+        
+        acte_id = data.get('id')
+        
+        if acte_id:
+            # 🔥 MODIFICATION dans Neon
+            db.execute_query("""
+                UPDATE actes 
+                SET nom = %s, prix = %s, description = %s, code = %s
+                WHERE id = %s AND structure_id = %s
+            """, (
+                data.get('nom'),
+                data.get('prix'),
+                data.get('description', ''),
+                data.get('code', ''),
+                acte_id,
+                structure_id
+            ))
+            print(f"✅ Acte {acte_id} modifié dans Neon")
+        else:
+            # 🔥 AJOUT dans Neon
+            result = db.execute_query("""
+                INSERT INTO actes (structure_id, code, nom, prix, description)
+                VALUES (%s, %s, %s, %s, %s)
+                RETURNING id
+            """, (
+                structure_id,
+                data.get('code', ''),
+                data.get('nom'),
+                data.get('prix'),
+                data.get('description', '')
+            ))
+            
+            if result and len(result) > 0:
+                new_id = result[0]['id'] if isinstance(result[0], dict) else result[0][0]
+                print(f"✅ Nouvel acte ajouté dans Neon avec ID: {new_id}")
+            else:
+                return jsonify({'success': False, 'error': 'Erreur insertion'}), 500
+        
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        print(f"❌ Erreur: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/admin/actes/<int:acte_id>', methods=['DELETE'])
 @login_required
 def api_delete_acte(acte_id):
-    # À implémenter
-    return jsonify({'success': True})
-
-@app.route('/api/admin/produits', methods=['POST'])
-@login_required
-def api_add_produit():
-    data = request.json
-    produits = sheets_helper.get_all_records('produits')
-    new_id = get_next_id(produits, 'ID')
-    
-    new_produit = [
-        new_id,
-        data.get('nom'),
-        data.get('prix'),
-        data.get('stock', 0),
-        session.get('structure_id')
-    ]
-    
-    sheets_helper.add_record('produits', new_produit)
-    return jsonify({'success': True})
+    """Supprimer un acte dans Neon"""
+    try:
+        structure_id = session.get('structure_id')
+        
+        db.execute_query("""
+            DELETE FROM actes 
+            WHERE id = %s AND structure_id = %s
+        """, (acte_id, structure_id))
+        
+        print(f"✅ Acte {acte_id} supprimé de Neon")
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        print(f"❌ Erreur: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/admin/produits/<int:produit_id>', methods=['DELETE'])
 @login_required
@@ -1293,13 +1384,15 @@ def debug_ventes():
 @app.route('/recu_structure/<int:vente_id>/<string:type>')
 @login_required
 def recu_structure(vente_id, type):
-    """Reçu pour la structure (copie comptable)"""
+    """Reçu pour la structure (copie comptable) - Lecture depuis Neon"""
     from datetime import datetime
+    import json
     
     structure_id = session.get('structure_id')
+    
+    # Récupérer les infos de la structure depuis Google Sheets
     structures = sheets_helper.get_all_records('structures', use_prefix=False)
-    structure_info = next((s for s in structures if s.get('ID') == structure_id), {})
-    patients = sheets_helper.get_all_records('patients')
+    structure_info = next((s for s in structures if str(s.get('ID')) == str(structure_id)), {})
     
     articles = []
     sous_total = 0
@@ -1308,65 +1401,107 @@ def recu_structure(vente_id, type):
     net_a_payer = 0
     patient_nom = 'Patient'
     mode_paiement = 'Espèces'
+    type_assurance = 'non_assure'
     patient_id = None
     
-    if type == 'actes':
-        ventes = sheets_helper.get_all_records('ventes_actes')
-        for v in ventes:
-            if v.get('ID') == vente_id:
-                total = float(v.get('total', 0))
-                sous_total += total
-                articles.append({
-                    'nom': v.get('acte_nom', 'Acte'),
-                    'quantite': int(v.get('quantite', 1)),
-                    'total': total
-                })
-                patient_nom = v.get('patient_nom', 'Patient')
-                mode_paiement = v.get('mode_paiement', 'Espèces')
-                taux_assurance = float(v.get('taux_assurance', 0))
-                prise_en_charge = float(v.get('prise_en_charge', 0))
-                net_a_payer = float(v.get('net_a_payer', 0))
-                patient_id = v.get('patient_id')
+    # 🔥 Lire depuis NEON
+    vente = db.execute_query("""
+        SELECT v.*, p.nom, p.prenom, p.type_assurance, p.numero_assure
+        FROM ventes v
+        LEFT JOIN patients p ON v.patient_id = p.id
+        WHERE v.id = %s AND v.structure_id = %s AND v.type = %s
+    """, (vente_id, structure_id, type))
     
+    if not vente or len(vente) == 0:
+        return f"Vente {vente_id} non trouvée", 404
+    
+    if isinstance(vente[0], dict):
+        v = vente[0]
+        patient_nom = v.get('patient_nom', '')
+        if not patient_nom:
+            patient_nom = f"{v.get('nom', '')} {v.get('prenom', '')}".strip()
+        if not patient_nom:
+            patient_nom = 'Patient'
+        
+        patient_id = v.get('patient_id')
+        mode_paiement = v.get('mode_paiement', 'Espèces')
+        taux_assurance = float(v.get('taux_assurance', 0))
+        prise_en_charge = float(v.get('prise_en_charge', 0))
+        net_a_payer = float(v.get('net_a_payer', 0))
+        sous_total = float(v.get('sous_total', 0))
+        type_assurance = v.get('type_assurance', 'non_assure')
+        
+        # Récupérer les articles
+        if type == 'actes':
+            actes_data = v.get('actes', [])
+            if isinstance(actes_data, str):
+                actes_data = json.loads(actes_data)
+            for a in actes_data:
+                articles.append({
+                    'nom': a.get('nom', 'Acte'),
+                    'quantite': int(a.get('quantite', 1)),
+                    'total': float(a.get('total', 0))
+                })
+        else:
+            produits_data = v.get('produits', [])
+            if isinstance(produits_data, str):
+                produits_data = json.loads(produits_data)
+            for p in produits_data:
+                articles.append({
+                    'nom': p.get('nom', 'Produit'),
+                    'quantite': int(p.get('quantite', 1)),
+                    'total': float(p.get('total', 0))
+                })
     else:
-        ventes = sheets_helper.get_all_records('ventes_pharma')
-        for v in ventes:
-            if v.get('ID') == vente_id:
-                total = float(v.get('total', 0))
-                sous_total += total
+        v = vente[0]
+        patient_nom = v[2] if len(v) > 2 and v[2] else ''
+        if not patient_nom and len(v) > 12:
+            patient_nom = f"{v[12] or ''} {v[13] or ''}".strip()
+        if not patient_nom:
+            patient_nom = 'Patient'
+        
+        patient_id = v[1] if len(v) > 1 else None
+        mode_paiement = v[7] if len(v) > 7 else 'Espèces'
+        taux_assurance = float(v[10]) if len(v) > 10 else 0
+        prise_en_charge = float(v[5]) if len(v) > 5 else 0
+        net_a_payer = float(v[6]) if len(v) > 6 else 0
+        sous_total = float(v[4]) if len(v) > 4 else 0
+        type_assurance = v[14] if len(v) > 14 else 'non_assure'
+        
+        # Récupérer les articles
+        if type == 'actes' and len(v) > 10:
+            actes_data = v[10]
+            if isinstance(actes_data, str):
+                actes_data = json.loads(actes_data)
+            for a in actes_data:
                 articles.append({
-                    'nom': v.get('produit_nom', 'Produit'),
-                    'quantite': int(v.get('quantite', 1)),
-                    'total': total
+                    'nom': a.get('nom', 'Acte'),
+                    'quantite': int(a.get('quantite', 1)),
+                    'total': float(a.get('total', 0))
                 })
-                patient_nom = v.get('patient_nom', 'Patient')
-                mode_paiement = v.get('mode_paiement', 'Espèces')
-                taux_assurance = float(v.get('taux_assurance', 0))
-                prise_en_charge = float(v.get('prise_en_charge', 0))
-                net_a_payer = float(v.get('net_a_payer', 0))
-                patient_id = v.get('patient_id')
+        elif type == 'pharmacie' and len(v) > 11:
+            produits_data = v[11]
+            if isinstance(produits_data, str):
+                produits_data = json.loads(produits_data)
+            for p in produits_data:
+                articles.append({
+                    'nom': p.get('nom', 'Produit'),
+                    'quantite': int(p.get('quantite', 1)),
+                    'total': float(p.get('total', 0))
+                })
     
-    # Récupérer le type d'assurance (optionnel pour structure)
-    type_assurance = 'non_assure'
-    if patient_id:
-        patient_info = next((p for p in patients if str(p.get('ID')) == str(patient_id)), {})
-        type_assurance = patient_info.get('type_assurance', 'non_assure')
-    
+    # Gestion des assurances
     assurance_text = 'Non assuré'
     if type_assurance == 'amu_cnss':
         assurance_text = 'AMU-CNSS'
     elif type_assurance == 'amu_inam':
         assurance_text = 'AMU-INAM'
-    elif type_assurance and type_assurance not in ['non_assure', 'amu_cnss', 'amu_inam', 'autre']:
+    elif type_assurance and type_assurance not in ['non_assure', 'amu_cnss', 'amu_inam']:
         assurance_text = type_assurance
-
-    # 🔥 AJOUTER CETTE LIGNE - Générer un nom de fichier
+    
     patient_nom_clean = patient_nom.replace(' ', '_').replace("'", "").replace('é', 'e').replace('è', 'e').replace('ê', 'e').replace('à', 'a').replace('ç', 'c')
-    nom_fichier = f"archive_facture_{patient_nom_clean}_{vente_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    structure_logo=structure_info.get('logo_url', '')
-    nom_caissier = session.get('user_name', '')
-
-
+    nom_fichier = f"recu_structure_{patient_nom_clean}_{vente_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    
     return render_template('recu_structure.html',
                          vente_id=vente_id,
                          articles=articles,
@@ -1380,21 +1515,22 @@ def recu_structure(vente_id, type):
                          structure_nom=structure_info.get('nom', 'Medilogic-GHP'),
                          date_actuelle=datetime.now().strftime('%d/%m/%Y %H:%M'),
                          nom_fichier=nom_fichier,
-                         structure_logo=structure_logo,
-                         nom_caissier=nom_caissier)
+                         structure_logo=structure_info.get('logo_url', ''),
+                         nom_caissier=session.get('user_name', ''))
 
 
-# ========== FACTURE STRUCTURE (ARCHIVE) ==========
 @app.route('/facture_structure/<int:vente_id>/<string:type>')
 @login_required
 def facture_structure(vente_id, type):
-    """Facture pour la structure (archive)"""
+    """Facture pour la structure (archive) - Lecture depuis Neon"""
     from datetime import datetime
+    import json
     
     structure_id = session.get('structure_id')
+    
+    # Récupérer les infos de la structure depuis Google Sheets
     structures = sheets_helper.get_all_records('structures', use_prefix=False)
-    structure_info = next((s for s in structures if s.get('ID') == structure_id), {})
-    patients = sheets_helper.get_all_records('patients')  # ← AJOUTER
+    structure_info = next((s for s in structures if str(s.get('ID')) == str(structure_id)), {})
     
     articles = []
     sous_total = 0
@@ -1405,76 +1541,112 @@ def facture_structure(vente_id, type):
     mode_paiement = 'Espèces'
     type_assurance = 'non_assure'
     numero_assure = ''
-    patient_id = None  # ← AJOUTER
+    patient_id = None
     
-    if type == 'actes':
-        ventes = sheets_helper.get_all_records('ventes_actes')
-        for v in ventes:
-            if v.get('ID') == vente_id:
-                total = float(v.get('total', 0))
-                sous_total += total
-                articles.append({
-                    'nom': v.get('acte_nom', 'Acte'),
-                    'quantite': int(v.get('quantite', 1)),
-                    'prix_unitaire': float(v.get('prix', 0)),
-                    'total': total
-                })
-                patient_nom = v.get('patient_nom', 'Patient')
-                mode_paiement = v.get('mode_paiement', 'Espèces')
-                taux_assurance = float(v.get('taux_assurance', 0))
-                prise_en_charge = float(v.get('prise_en_charge', 0))
-                net_a_payer = float(v.get('net_a_payer', 0))
-                patient_id = v.get('patient_id')
+    # 🔥 Lire depuis NEON
+    vente = db.execute_query("""
+        SELECT v.*, p.nom, p.prenom, p.type_assurance, p.numero_assure
+        FROM ventes v
+        LEFT JOIN patients p ON v.patient_id = p.id
+        WHERE v.id = %s AND v.structure_id = %s AND v.type = %s
+    """, (vente_id, structure_id, type))
+    
+    if not vente or len(vente) == 0:
+        return f"Vente {vente_id} non trouvée", 404
+    
+    if isinstance(vente[0], dict):
+        v = vente[0]
+        patient_nom = v.get('patient_nom', '')
+        if not patient_nom:
+            patient_nom = f"{v.get('nom', '')} {v.get('prenom', '')}".strip()
+        if not patient_nom:
+            patient_nom = 'Patient'
         
-        # ← AJOUTER la récupération des infos patient
-        if patient_id:
-            patient_info = next((p for p in patients if str(p.get('ID')) == str(patient_id)), {})
-            type_assurance = patient_info.get('type_assurance', 'non_assure')
-            numero_assure = patient_info.get('numero_assure', '')
-    
-    else:  # pharmacie
-        ventes = sheets_helper.get_all_records('ventes_pharma')
-        for v in ventes:
-            if v.get('ID') == vente_id:
-                total = float(v.get('total', 0))
-                sous_total += total
-                articles.append({
-                    'nom': v.get('produit_nom', 'Produit'),
-                    'quantite': int(v.get('quantite', 1)),
-                    'prix_unitaire': float(v.get('prix', 0)),
-                    'total': total
-                })
-                patient_nom = v.get('patient_nom', 'Patient')
-                mode_paiement = v.get('mode_paiement', 'Espèces')
-                taux_assurance = float(v.get('taux_assurance', 0))
-                prise_en_charge = float(v.get('prise_en_charge', 0))
-                net_a_payer = float(v.get('net_a_payer', 0))
-                patient_id = v.get('patient_id')
+        patient_id = v.get('patient_id')
+        mode_paiement = v.get('mode_paiement', 'Espèces')
+        taux_assurance = float(v.get('taux_assurance', 0))
+        prise_en_charge = float(v.get('prise_en_charge', 0))
+        net_a_payer = float(v.get('net_a_payer', 0))
+        sous_total = float(v.get('sous_total', 0))
+        type_assurance = v.get('type_assurance', 'non_assure')
+        numero_assure = v.get('numero_assure', '')
         
-        # ← AJOUTER la récupération des infos patient
-        if patient_id:
-            patient_info = next((p for p in patients if str(p.get('ID')) == str(patient_id)), {})
-            type_assurance = patient_info.get('type_assurance', 'non_assure')
-            numero_assure = patient_info.get('numero_assure', '')
+        # Récupérer les articles avec prix unitaire
+        if type == 'actes':
+            actes_data = v.get('actes', [])
+            if isinstance(actes_data, str):
+                actes_data = json.loads(actes_data)
+            for a in actes_data:
+                articles.append({
+                    'nom': a.get('nom', 'Acte'),
+                    'quantite': int(a.get('quantite', 1)),
+                    'prix_unitaire': float(a.get('prix', 0)),
+                    'total': float(a.get('total', 0))
+                })
+        else:
+            produits_data = v.get('produits', [])
+            if isinstance(produits_data, str):
+                produits_data = json.loads(produits_data)
+            for p in produits_data:
+                articles.append({
+                    'nom': p.get('nom', 'Produit'),
+                    'quantite': int(p.get('quantite', 1)),
+                    'prix_unitaire': float(p.get('prix_reel', p.get('prix', 0))),
+                    'total': float(p.get('total', 0))
+                })
+    else:
+        v = vente[0]
+        patient_nom = v[2] if len(v) > 2 and v[2] else ''
+        if not patient_nom and len(v) > 12:
+            patient_nom = f"{v[12] or ''} {v[13] or ''}".strip()
+        if not patient_nom:
+            patient_nom = 'Patient'
+        
+        patient_id = v[1] if len(v) > 1 else None
+        mode_paiement = v[7] if len(v) > 7 else 'Espèces'
+        taux_assurance = float(v[10]) if len(v) > 10 else 0
+        prise_en_charge = float(v[5]) if len(v) > 5 else 0
+        net_a_payer = float(v[6]) if len(v) > 6 else 0
+        sous_total = float(v[4]) if len(v) > 4 else 0
+        type_assurance = v[14] if len(v) > 14 else 'non_assure'
+        numero_assure = v[15] if len(v) > 15 else ''
+        
+        # Récupérer les articles
+        if type == 'actes' and len(v) > 10:
+            actes_data = v[10]
+            if isinstance(actes_data, str):
+                actes_data = json.loads(actes_data)
+            for a in actes_data:
+                articles.append({
+                    'nom': a.get('nom', 'Acte'),
+                    'quantite': int(a.get('quantite', 1)),
+                    'prix_unitaire': float(a.get('prix', 0)),
+                    'total': float(a.get('total', 0))
+                })
+        elif type == 'pharmacie' and len(v) > 11:
+            produits_data = v[11]
+            if isinstance(produits_data, str):
+                produits_data = json.loads(produits_data)
+            for p in produits_data:
+                articles.append({
+                    'nom': p.get('nom', 'Produit'),
+                    'quantite': int(p.get('quantite', 1)),
+                    'prix_unitaire': float(p.get('prix_reel', p.get('prix', 0))),
+                    'total': float(p.get('total', 0))
+                })
     
-    # 🔥 GESTION DES ASSURANCES PERSONNALISÉES
+    # Gestion des assurances
     assurance_text = 'Non assuré'
     if type_assurance == 'amu_cnss':
         assurance_text = 'AMU-CNSS'
     elif type_assurance == 'amu_inam':
         assurance_text = 'AMU-INAM'
-    elif type_assurance == 'autre':
-        assurance_text = 'Autre assurance'
-    elif type_assurance and type_assurance not in ['non_assure', 'amu_cnss', 'amu_inam', 'autre']:
+    elif type_assurance and type_assurance not in ['non_assure', 'amu_cnss', 'amu_inam']:
         assurance_text = type_assurance
-
-    # 🔥 AJOUTER CETTE LIGNE - Générer un nom de fichier
+    
     patient_nom_clean = patient_nom.replace(' ', '_').replace("'", "").replace('é', 'e').replace('è', 'e').replace('ê', 'e').replace('à', 'a').replace('ç', 'c')
-    nom_fichier = f"archive_facture_{patient_nom_clean}_{vente_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    structure_logo=structure_info.get('logo_url', '')
-    nom_caissier = session.get('user_name', '')
-
-
+    nom_fichier = f"facture_structure_{patient_nom_clean}_{vente_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    
     return render_template('facture_structure.html',
                          vente_id=vente_id,
                          articles=articles,
@@ -1487,11 +1659,12 @@ def facture_structure(vente_id, type):
                          numero_assure=numero_assure,
                          mode_paiement=mode_paiement,
                          structure_nom=structure_info.get('nom', 'Medilogic-GHP'),
+                         structure_adresse=structure_info.get('adresse', ''),
+                         structure_telephone=structure_info.get('telephone', ''),
                          date_actuelle=datetime.now().strftime('%d/%m/%Y %H:%M'),
                          nom_fichier=nom_fichier,
-                         structure_logo=structure_logo,
-                         nom_caissier=nom_caissier)
-
+                         structure_logo=structure_info.get('logo_url', ''),
+                         nom_caissier=session.get('user_name', ''))
                      
 
 # ========== RENDEZ-VOUS ==========
@@ -2178,6 +2351,671 @@ def api_update_patient(patient_id):
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/produits')
+@login_required
+def api_get_produits():
+    structure_id = session.get('structure_id')
+    
+    produits = db.execute_query("""
+        SELECT id, code, nom, prix_vente, quantite_stock, seuil_alerte, 
+               unite, categorie, fournisseur, peremption
+        FROM produits 
+        WHERE structure_id = %s 
+        ORDER BY nom
+    """, (structure_id,))
+    
+    return jsonify(produits)
+
+@app.route('/api/produits', methods=['POST'])
+@login_required
+def api_add_produit():
+    try:
+        data = request.json
+        structure_id = session.get('structure_id')
+        
+        result = db.execute_query("""
+            INSERT INTO produits (structure_id, code, nom, prix_vente, prix_achat,
+                                  quantite_stock, seuil_alerte, unite, categorie)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+        """, (
+            structure_id,
+            data.get('code'),
+            data.get('nom'),
+            data.get('prix_vente'),
+            data.get('prix_achat', 0),
+            data.get('quantite_stock', 0),
+            data.get('seuil_alerte', 10),
+            data.get('unite', 'unité'),
+            data.get('categorie', '')
+        ))
+        
+        if result:
+            return jsonify({'success': True, 'id': result[0]['id']})
+        return jsonify({'success': False, 'error': 'Erreur insertion'}), 500
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+@app.route('/api/produits/<int:produit_id>/stock', methods=['PUT'])
+@login_required
+def api_update_stock(produit_id):
+    try:
+        data = request.json
+        structure_id = session.get('structure_id')
+        quantite = data.get('quantite')
+        operation = data.get('operation', 'vendre')  # vendre, ajouter, retirer
+        
+        if operation == 'vendre':
+            sql = "UPDATE produits SET quantite_stock = quantite_stock - %s WHERE id = %s AND structure_id = %s"
+        elif operation == 'ajouter':
+            sql = "UPDATE produits SET quantite_stock = quantite_stock + %s WHERE id = %s AND structure_id = %s"
+        else:
+            sql = "UPDATE produits SET quantite_stock = %s WHERE id = %s AND structure_id = %s"
+        
+        db.execute_query(sql, (quantite, produit_id, structure_id))
+        
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/admin/produits', methods=['POST'])
+@login_required
+def api_admin_add_produit():
+    try:
+        data = request.json
+        structure_id = session.get('structure_id')
+        
+        result = db.execute_query("""
+            INSERT INTO produits (structure_id, code, nom, prix_vente, quantite_stock)
+            VALUES (%s, %s, %s, %s, %s)
+            RETURNING id
+        """, (
+            structure_id,
+            data.get('code'),
+            data.get('nom'),
+            data.get('prix_vente'),
+            data.get('quantite_stock', 0)
+        ))
+        
+        return jsonify({'success': True, 'id': result[0]['id']})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/admin/produits/<int:produit_id>', methods=['PUT'])
+@login_required
+def api_admin_update_produit(produit_id):
+    try:
+        data = request.json
+        structure_id = session.get('structure_id')
+        
+        db.execute_query("""
+            UPDATE produits 
+            SET code = %s, nom = %s, prix_vente = %s, quantite_stock = %s
+            WHERE id = %s AND structure_id = %s
+        """, (
+            data.get('code'),
+            data.get('nom'),
+            data.get('prix_vente'),
+            data.get('quantite_stock', 0),
+            produit_id,
+            structure_id
+        ))
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/admin/produits/<int:produit_id>', methods=['DELETE'])
+@login_required
+def api_admin_delete_produit(produit_id):
+    try:
+        structure_id = session.get('structure_id')
+        db.execute_query("DELETE FROM produits WHERE id = %s AND structure_id = %s", (produit_id, structure_id))
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# ========== ROUTES API POUR LA PHARMACIE ==========
+
+# ========== ROUTES API POUR LA PHARMACIE (SANS HISTORIQUE) ==========
+
+@app.route('/api/produits/<int:id>/approvisionner', methods=['POST'])
+@login_required
+def api_approvisionner_produit(id):
+    """Approvisionner un produit (ajouter au stock)"""
+    try:
+        data = request.json
+        structure_id = session.get('structure_id')
+        quantite = data.get('quantite', 0)
+        
+        if not quantite or quantite <= 0:
+            return jsonify({'success': False, 'error': 'Quantité invalide'}), 400
+        
+        # Vérifier que le produit appartient à la structure
+        produit = db.execute_query("""
+            SELECT id, quantite_stock FROM produits 
+            WHERE id = %s AND structure_id = %s
+        """, (id, structure_id))
+        
+        if not produit or len(produit) == 0:
+            return jsonify({'success': False, 'error': 'Produit non trouvé'}), 404
+        
+        # Mettre à jour le stock
+        result = db.execute_query("""
+            UPDATE produits 
+            SET quantite_stock = quantite_stock + %s
+            WHERE id = %s AND structure_id = %s
+            RETURNING id, quantite_stock
+        """, (quantite, id, structure_id))
+        
+        if result and len(result) > 0:
+            nouveau_stock = result[0].get('quantite_stock') if isinstance(result[0], dict) else result[0][1]
+            return jsonify({'success': True, 'message': f'{quantite} unités ajoutées', 'stock': nouveau_stock})
+        else:
+            return jsonify({'success': False, 'error': 'Erreur lors de la mise à jour'}), 500
+        
+    except Exception as e:
+        print(f"❌ Erreur approvisionnement: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/produits/<int:id>/stock', methods=['PUT'])
+@login_required
+def api_modifier_stock(id):
+    """Modifier le stock d'un produit (ajouter ou retirer)"""
+    try:
+        data = request.json
+        structure_id = session.get('structure_id')
+        quantite = data.get('quantite', 0)
+        operation = data.get('operation', 'ajouter')
+        
+        if not quantite or quantite <= 0:
+            return jsonify({'success': False, 'error': 'Quantité invalide'}), 400
+        
+        # Vérifier que le produit appartient à la structure
+        produit = db.execute_query("""
+            SELECT id, quantite_stock FROM produits 
+            WHERE id = %s AND structure_id = %s
+        """, (id, structure_id))
+        
+        if not produit or len(produit) == 0:
+            return jsonify({'success': False, 'error': 'Produit non trouvé'}), 404
+        
+        stock_actuel = produit[0].get('quantite_stock') if isinstance(produit[0], dict) else produit[0][1]
+        
+        if operation == 'retirer':
+            if quantite > stock_actuel:
+                return jsonify({'success': False, 'error': 'Stock insuffisant'}), 400
+            nouvelle_quantite = stock_actuel - quantite
+        else:
+            nouvelle_quantite = stock_actuel + quantite
+        
+        # Mettre à jour le stock
+        result = db.execute_query("""
+            UPDATE produits 
+            SET quantite_stock = %s
+            WHERE id = %s AND structure_id = %s
+            RETURNING id
+        """, (nouvelle_quantite, id, structure_id))
+        
+        if result and len(result) > 0:
+            return jsonify({'success': True, 'stock': nouvelle_quantite})
+        else:
+            return jsonify({'success': False, 'error': 'Erreur lors de la mise à jour'}), 500
+        
+    except Exception as e:
+        print(f"❌ Erreur modification stock: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/ventes/pharma', methods=['POST'])
+@login_required
+def api_vente_pharma():
+    """Enregistrer une vente de produits pharmaceutiques"""
+    try:
+        data = request.json
+        structure_id = session.get('structure_id')
+        user_id = session.get('user_id')
+        
+        print("=" * 60)
+        print("🔄 NOUVELLE VENTE PHARMACIE")
+        print(f"   Données reçues: {json.dumps(data, indent=2, default=str)}")
+        print("=" * 60)
+        
+        if not structure_id:
+            return jsonify({'success': False, 'error': 'Structure non trouvée'}), 400
+        
+        # Vérifier les données du patient
+        patient_id = data.get('patient_id')
+        patient_nom = data.get('patient_nom')
+        
+        if not patient_id:
+            print("❌ Erreur: patient_id manquant")
+            return jsonify({'success': False, 'error': 'ID patient manquant'}), 400
+        
+        # Vérifier que le patient existe
+        patient_check = db.execute_query("""
+            SELECT id, nom, prenom FROM patients 
+            WHERE id = %s AND structure_id = %s
+        """, (patient_id, structure_id))
+        
+        if not patient_check or len(patient_check) == 0:
+            print(f"❌ Patient {patient_id} non trouvé dans la structure {structure_id}")
+            return jsonify({'success': False, 'error': 'Patient non trouvé'}), 404
+        
+        from datetime import datetime
+        
+        # Insérer la vente
+        result = db.execute_query("""
+            INSERT INTO ventes (
+                patient_id, structure_id, user_id, type, sous_total, 
+                prise_en_charge, net_a_payer, mode_paiement, 
+                avec_ordonnance, taux_assurance, date_vente
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+        """, (
+            patient_id, structure_id, user_id, 'pharmacie',
+            float(data.get('sous_total', 0)), 
+            float(data.get('prise_en_charge', 0)),
+            float(data.get('net_a_payer', 0)), 
+            data.get('mode_paiement', 'especes'),
+            data.get('avec_ordonnance', False), 
+            float(data.get('taux_assurance', 0)),
+            datetime.now()
+        ))
+        
+        if not result or len(result) == 0:
+            return jsonify({'success': False, 'error': 'Erreur insertion vente'}), 500
+        
+        vente_id = result[0]['id'] if isinstance(result[0], dict) else result[0][0]
+        print(f"✅ Vente créée avec ID: {vente_id}")
+        
+        # Enregistrer les produits
+        produits = data.get('produits', [])
+        print(f"📦 Produits à enregistrer ({len(produits)}):")
+        
+        for produit in produits:
+            produit_id = produit.get('id')
+            produit_nom = produit.get('nom')
+            prix_reel = float(produit.get('prix_reel', 0))
+            quantite = int(produit.get('quantite', 0))
+            total = float(produit.get('total', 0))
+            
+            print(f"   - {produit_nom} (ID:{produit_id}): {quantite} x {prix_reel} = {total}")
+            
+            # Détail de vente
+            db.execute_query("""
+                INSERT INTO details_ventes (
+                    vente_id, produit_id, nom_produit, prix_unitaire, 
+                    quantite, total, structure_id
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """, (vente_id, produit_id, produit_nom, prix_reel, quantite, total, structure_id))
+            
+            # Mise à jour du stock
+            db.execute_query("""
+                UPDATE produits 
+                SET quantite_stock = quantite_stock - %s
+                WHERE id = %s AND structure_id = %s
+            """, (quantite, produit_id, structure_id))
+        
+        print(f"🎉 Vente {vente_id} finalisée avec succès!")
+        return jsonify({'success': True, 'vente_id': vente_id})
+        
+    except Exception as e:
+        print(f"❌ Erreur vente pharma: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/produits/<int:id>/stock', methods=['GET'])
+@login_required
+def api_get_stock_produit(id):
+    """Récupérer le stock d'un produit"""
+    try:
+        structure_id = session.get('structure_id')
+        
+        result = db.execute_query("""
+            SELECT id, nom, quantite_stock, seuil_alerte 
+            FROM produits 
+            WHERE id = %s AND structure_id = %s
+        """, (id, structure_id))
+        
+        if not result or len(result) == 0:
+            return jsonify({'success': False, 'error': 'Produit non trouvé'}), 404
+        
+        produit = result[0] if isinstance(result[0], dict) else {
+            'id': result[0][0],
+            'nom': result[0][1],
+            'quantite_stock': result[0][2],
+            'seuil_alerte': result[0][3]
+        }
+        
+        return jsonify({'success': True, 'stock': produit})
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/patients/count')
+@login_required
+def api_patients_count():
+    """Retourne le nombre de patients"""
+    try:
+        structure_id = session.get('structure_id')
+        result = db.execute_query("""
+            SELECT COUNT(*) as total FROM patients WHERE structure_id = %s
+        """, (structure_id,))
+        total = result[0]['total'] if result else 0
+        return jsonify({'total': total})
+    except Exception as e:
+        return jsonify({'total': 0}), 500
+
+@app.route('/api/ventes/stats')
+@login_required
+def api_ventes_stats():
+    """Retourne les statistiques des ventes (actes et pharmacie) depuis Neon"""
+    try:
+        structure_id = session.get('structure_id')
+        
+        # Date du jour
+        today = datetime.now().strftime('%Y-%m-%d')
+        
+        # Récupérer toutes les ventes
+        ventes = db.execute_query("""
+            SELECT type, net_a_payer, sous_total, date_vente
+            FROM ventes 
+            WHERE structure_id = %s
+        """, (structure_id,))
+        
+        actes_today = 0
+        pharma_today = 0
+        ca_net_today = 0      # Ce que les patients ont payé
+        ca_brut_today = 0     # Total (patients + assurance)
+        
+        for v in ventes:
+            if isinstance(v, dict):
+                date_vente = v.get('date_vente')
+                if date_vente:
+                    if hasattr(date_vente, 'strftime'):
+                        date_vente_str = date_vente.strftime('%Y-%m-%d')
+                    else:
+                        date_vente_str = str(date_vente)[:10]
+                    
+                    if date_vente_str == today:
+                        if v.get('type') == 'actes':
+                            actes_today += 1
+                        else:
+                            pharma_today += 1
+                        
+                        # NET = ce que le patient a payé
+                        ca_net_today += float(v.get('net_a_payer', 0))
+                        # BRUT = total avant assurance (sous_total)
+                        ca_brut_today += float(v.get('sous_total', 0))
+        
+        return jsonify({
+            'actes_today': actes_today,
+            'pharma_today': pharma_today,
+            'ca_net_today': ca_net_today,      # Patient payé
+            'ca_brut_today': ca_brut_today     # Total général
+        })
+        
+    except Exception as e:
+        print(f"❌ Erreur stats: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'actes_today': 0, 
+            'pharma_today': 0, 
+            'ca_net_today': 0,
+            'ca_brut_today': 0
+        }), 500
+
+@app.route('/api/activites/recentes')
+@login_required
+def api_activites_recentes():
+    """Retourne les 10 dernières activités"""
+    try:
+        structure_id = session.get('structure_id')
+        
+        # 🔥 Récupérer avec jointure pour avoir le nom du patient
+        ventes = db.execute_query("""
+            SELECT 
+                v.id,
+                v.patient_id,
+                v.patient_nom,
+                v.type,
+                v.net_a_payer,
+                v.date_vente,
+                p.nom,
+                p.prenom
+            FROM ventes v
+            LEFT JOIN patients p ON v.patient_id = p.id
+            WHERE v.structure_id = %s
+            ORDER BY v.date_vente DESC
+            LIMIT 10
+        """, (structure_id,))
+        
+        result = []
+        for v in ventes:
+            if isinstance(v, dict):
+                # 🔥 Priorité au patient_nom, sinon construire depuis la jointure
+                patient_name = v.get('patient_nom', '')
+                if not patient_name or patient_name == '':
+                    nom = v.get('nom', '')
+                    prenom = v.get('prenom', '')
+                    patient_name = f"{nom} {prenom}".strip()
+                if not patient_name:
+                    patient_name = 'Patient'
+                
+                date_vente = v.get('date_vente')
+                if date_vente:
+                    if hasattr(date_vente, 'strftime'):
+                        date_str = date_vente.strftime('%Y-%m-%d %H:%M:%S')
+                    else:
+                        date_str = str(date_vente)
+                else:
+                    date_str = ''
+                    
+                result.append({
+                    'id': v.get('id'),
+                    'patient_nom': patient_name,
+                    'type': v.get('type', 'unknown'),
+                    'montant': float(v.get('net_a_payer', 0)),
+                    'date': date_str
+                })
+            else:
+                # Format tuple: v[0]=id, v[1]=patient_id, v[2]=patient_nom, v[3]=type, 
+                # v[4]=net_a_payer, v[5]=date_vente, v[6]=nom, v[7]=prenom
+                patient_name = v[2] if len(v) > 2 and v[2] else ''
+                if not patient_name and len(v) > 6:
+                    patient_name = f"{v[6] or ''} {v[7] or ''}".strip()
+                if not patient_name:
+                    patient_name = 'Patient'
+                
+                date_vente = v[5] if len(v) > 5 else None
+                if date_vente:
+                    if hasattr(date_vente, 'strftime'):
+                        date_str = date_vente.strftime('%Y-%m-%d %H:%M:%S')
+                    else:
+                        date_str = str(date_vente)
+                else:
+                    date_str = ''
+                    
+                result.append({
+                    'id': v[0],
+                    'patient_nom': patient_name,
+                    'type': v[3] if len(v) > 3 else 'unknown',
+                    'montant': float(v[4]) if len(v) > 4 else 0,
+                    'date': date_str
+                })
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        print(f"❌ Erreur activités: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify([]), 500
+
+@app.route('/api/ventes/actes', methods=['POST'])
+@login_required
+def api_add_acte_vente():
+    import json
+    from datetime import datetime
+    
+    try:
+        data = request.json
+        structure_id = session.get('structure_id')
+        
+        print("=" * 60)
+        print("🔵 VENTE ACTES - INSERTION DIRECTE")
+        print(f"Patient: {data.get('patient_nom')}")
+        print(f"Actes: {data.get('actes')}")
+        print("=" * 60)
+        
+        if not structure_id:
+            return jsonify({'success': False, 'error': 'Structure non trouvée'}), 400
+        
+        patient_id = data.get('patient_id')
+        if not patient_id:
+            return jsonify({'success': False, 'error': 'ID patient manquant'}), 400
+        
+        # 🔥 INSERTION - COPIE EXACTE DU TEST QUI A MARCHÉ
+        result = db.execute_query("""
+            INSERT INTO ventes (
+                patient_id, patient_nom, structure_id, type, 
+                sous_total, prise_en_charge, net_a_payer, 
+                mode_paiement, taux_assurance, date_vente, actes
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s::jsonb)
+            RETURNING id
+        """, (
+            data.get('patient_id'),
+            data.get('patient_nom', 'Patient'),
+            structure_id,
+            'actes',
+            float(data.get('sous_total', 0)),
+            float(data.get('prise_en_charge', 0)),
+            float(data.get('net_a_payer', 0)),
+            data.get('mode_paiement', 'especes'),
+            float(data.get('taux_assurance', 0)),
+            json.dumps(data.get('actes', []), ensure_ascii=False)
+        ))
+        
+        if result and len(result) > 0:
+            vente_id = result[0]['id']
+            print(f"✅ Vente actes INSÉRÉE ! ID: {vente_id}")
+            
+            # Vérification immédiate
+            check = db.execute_query("SELECT type FROM ventes WHERE id = %s", (vente_id,))
+            print(f"🔍 Vérification: {check}")
+            
+            return jsonify({'success': True, 'vente_id': vente_id})
+        else:
+            return jsonify({'success': False, 'error': 'Erreur insertion'}), 500
+            
+    except Exception as e:
+        print(f"❌ ERREUR: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/ventes/all')
+@login_required
+def api_get_all_ventes():
+    """Récupérer toutes les ventes (actes + pharmacie) depuis Neon"""
+    try:
+        structure_id = session.get('structure_id')
+        
+        ventes = db.execute_query("""
+            SELECT 
+                id, patient_nom, type, net_a_payer, taux_assurance, 
+                date_vente, actes, produits
+            FROM ventes 
+            WHERE structure_id = %s
+            ORDER BY date_vente DESC
+        """, (structure_id,))
+        
+        result = []
+        import json
+        
+        for v in ventes:
+            detail = ""
+            
+            # 🔥 Pour les actes - afficher TOUS les actes
+            if v.get('type') == 'actes' and v.get('actes'):
+                actes_data = v.get('actes')
+                if isinstance(actes_data, str):
+                    actes_data = json.loads(actes_data)
+                if actes_data:
+                    # Liste de tous les actes avec leur quantité
+                    articles = []
+                    for a in actes_data:
+                        nom = a.get('nom', 'Acte')
+                        qte = a.get('quantite', 1)
+                        if qte > 1:
+                            articles.append(f"{nom} x{qte}")
+                        else:
+                            articles.append(nom)
+                    detail = ", ".join(articles)
+            
+            # 🔥 Pour la pharmacie - afficher TOUS les produits
+            elif v.get('type') == 'pharma' and v.get('produits'):
+                produits_data = v.get('produits')
+                if isinstance(produits_data, str):
+                    produits_data = json.loads(produits_data)
+                if produits_data:
+                    # Liste de tous les produits avec leur quantité
+                    articles = []
+                    for p in produits_data:
+                        nom = p.get('nom', 'Produit')
+                        qte = p.get('quantite', 1)
+                        if qte > 1:
+                            articles.append(f"{nom} x{qte}")
+                        else:
+                            articles.append(nom)
+                    detail = ", ".join(articles)
+            
+            result.append({
+                'ID': v.get('id'),
+                'patient_nom': v.get('patient_nom', 'Patient'),
+                'type': v.get('type'),
+                'net_a_payer': float(v.get('net_a_payer', 0)),
+                'taux_assurance': v.get('taux_assurance', 0),
+                'date': str(v.get('date_vente', '')),
+                'detail': detail if detail else '-'
+            })
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        print(f"❌ Erreur chargement ventes: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify([]), 500
+
+@app.route('/api/actes')
+@login_required
+def api_get_actes():
+    """Récupérer tous les actes depuis Neon"""
+    try:
+        structure_id = session.get('structure_id')
+        
+        actes = db.execute_query("""
+            SELECT id, code, nom, prix, description
+            FROM actes 
+            WHERE structure_id = %s 
+            ORDER BY nom
+        """, (structure_id,))
+        
+        return jsonify(actes)
+        
+    except Exception as e:
+        print(f"❌ Erreur: {e}")
+        return jsonify([]), 500
 
 if __name__ == '__main__':
     # Récupère le port depuis la variable d'environnement ou utilise 5000 par défaut

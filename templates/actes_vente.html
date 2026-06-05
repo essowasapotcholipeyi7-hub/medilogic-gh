@@ -187,15 +187,20 @@ function clearActeSearch() {
 
 // ========== GESTION PATIENT ==========
 function checkSelectedPatient() {
+    patientId = null;
+    patientTaux = 0;
+    patientName = '';
+    patientAssurance = '';
+    
     patientId = sessionStorage.getItem('selectedPatientId');
     patientName = sessionStorage.getItem('selectedPatientName');
-    let assurance = sessionStorage.getItem('selectedPatientAssurance');
+    patientAssurance = sessionStorage.getItem('selectedPatientAssurance');
     let taux = sessionStorage.getItem('selectedPatientTaux');
     
     if (!patientId || patientId === 'null' || patientId === 'undefined') {
         patientId = localStorage.getItem('selectedPatientId');
         patientName = localStorage.getItem('selectedPatientName');
-        assurance = localStorage.getItem('selectedPatientAssurance');
+        patientAssurance = localStorage.getItem('selectedPatientAssurance');
         taux = localStorage.getItem('selectedPatientTaux');
     }
     
@@ -203,35 +208,22 @@ function checkSelectedPatient() {
         patientTaux = parseFloat(taux) || 0;
         document.getElementById('selectedPatientName').innerText = patientName || 'Patient';
         
-        // 🔥 GESTION DES ASSURANCES (y compris personnalisées)
         let assuranceText = 'Non assuré';
-        let assuranceClass = 'bg-secondary';
+        if (patientAssurance === 'amu_cnss') assuranceText = 'AMU-CNSS';
+        else if (patientAssurance === 'amu_inam') assuranceText = 'AMU-INAM';
+        else if (patientAssurance && patientAssurance !== 'non_assure') assuranceText = patientAssurance;
         
-        if (assurance === 'amu_cnss') {
-            assuranceText = 'AMU-CNSS';
-            assuranceClass = 'bg-success';
-        } else if (assurance === 'amu_inam') {
-            assuranceText = 'AMU-INAM';
-            assuranceClass = 'bg-primary';
-        } else if (assurance === 'autre') {
-            assuranceText = 'Autre assurance';
-            assuranceClass = 'bg-info';
-        } else if (assurance && assurance !== 'non_assure' && assurance !== 'null') {
-            // 🔥 C'est une assurance personnalisée (ex: "CNPS", "MUTUELLE", "ALLIANZ")
-            assuranceText = assurance;
-            assuranceClass = 'bg-info';
-        }
-        
-        const assuranceSpan = document.getElementById('selectedAssurance');
-        assuranceSpan.innerHTML = assuranceText;
-        assuranceSpan.className = `badge ${assuranceClass} px-3 py-2`;
-        
+        document.getElementById('selectedAssurance').innerHTML = assuranceText;
         document.getElementById('selectedTaux').innerHTML = patientTaux;
         document.getElementById('patientInfo').style.display = 'block';
         document.getElementById('noPatientAlert').style.display = 'none';
+        
+        console.log('Patient chargé:', { patientId, patientName, patientTaux });
     } else {
         document.getElementById('patientInfo').style.display = 'none';
         document.getElementById('noPatientAlert').style.display = 'block';
+        document.getElementById('finaliserBtn').disabled = true;
+        console.log('Aucun patient sélectionné');
     }
 }
 
@@ -377,7 +369,57 @@ function getCurrentDateTime() {
     return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 }
 
+// ========== FONCTIONS DE PROGRESSION ==========
+function showProgress(title, message) {
+    // Créer la modale si elle n'existe pas
+    let modal = document.getElementById('progressModal');
+    if (!modal) {
+        const modalHtml = `
+            <div class="modal fade" id="progressModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-body text-center p-4">
+                            <div class="spinner-border text-primary mb-3" style="width: 3rem; height: 3rem;" role="status">
+                                <span class="visually-hidden">Chargement...</span>
+                            </div>
+                            <h5 id="progressTitle">Traitement en cours...</h5>
+                            <p id="progressMessage" class="text-muted mb-0">Veuillez patienter</p>
+                            <div class="progress mt-3" style="height: 5px;">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        modal = document.getElementById('progressModal');
+    }
+    
+    document.getElementById('progressTitle').innerText = title || 'Traitement en cours...';
+    document.getElementById('progressMessage').innerHTML = message || 'Veuillez patienter';
+    const progressBar = document.querySelector('#progressModal .progress-bar');
+    if (progressBar) progressBar.style.width = '0%';
+    const modalInstance = new bootstrap.Modal(modal);
+    modalInstance.show();
+}
+
+function updateProgress(percent, message) {
+    const progressBar = document.querySelector('#progressModal .progress-bar');
+    if (progressBar) progressBar.style.width = percent + '%';
+    if (message) document.getElementById('progressMessage').innerHTML = message;
+}
+
+function hideProgress() {
+    const modal = document.getElementById('progressModal');
+    if (modal) {
+        const modalInstance = bootstrap.Modal.getInstance(modal);
+        if (modalInstance) modalInstance.hide();
+    }
+}
+
 // ========== FINALISATION VENTE ==========
+// ========== FINALISATION VENTE ACTES ==========
 function finaliserVente() {
     console.log('=== FINALISATION VENTE ACTES ===');
     console.log('Panier:', panier);
@@ -408,7 +450,7 @@ function finaliserVente() {
     
     console.log('Calculs:', {sousTotal, priseEnCharge, netAPayer});
     
-    // ========== FORMATEUR LES ACTES ==========
+    // ========== FORMATER LES ACTES ==========
     let actesData = panier.map(item => ({
         id: parseInt(item.id),
         nom: item.nom,
@@ -433,6 +475,18 @@ function finaliserVente() {
     
     let typeDocument = document.getElementById('typeDocument').value;
     
+    // ========== AFFICHER MODALE DE PROGRESSION ==========
+    showProgress('Finalisation de la vente', 'Préparation de la vente...');
+    updateProgress(10, 'Vérification...');
+    
+    let progress = 10;
+    const progressInterval = setInterval(() => {
+        if (progress < 90) {
+            progress += 10;
+            updateProgress(progress, `Traitement en cours... ${progress}%`);
+        }
+    }, 300);
+    
     // ========== ENVOI AU SERVEUR ==========
     fetch('/api/ventes/actes', {
         method: 'POST',
@@ -441,47 +495,51 @@ function finaliserVente() {
     })
     .then(response => response.json())
     .then(data => {
+        clearInterval(progressInterval);
         console.log('Réponse API:', data);
+        
         if(data.success) {
-            if (typeDocument === 'recu_client') {
-                window.location.href = `/recu/${data.vente_id}/actes`;
-            } else if (typeDocument === 'recu_structure') {
-                window.location.href = `/recu_structure/${data.vente_id}/actes`;
-            } else if (typeDocument === 'facture_client') {
-                window.location.href = `/facture/${data.vente_id}/actes`;
-            } else if (typeDocument === 'facture_structure') {
-                window.location.href = `/facture_structure/${data.vente_id}/actes`;
-            } else if (typeDocument === 'les_deux') {
-                window.open(`/recu/${data.vente_id}/actes`, '_blank');
-                window.open(`/recu_structure/${data.vente_id}/actes`, '_blank');
-                window.location.href = "/dashboard";
-            } else {
-                window.location.href = "/dashboard";
-            }
+            updateProgress(100, 'Vente enregistrée !');
+            
+            setTimeout(() => {
+                hideProgress();
+                
+                // Vider le panier
+                panier = [];
+                afficherPanier();
+                
+                // Redirection selon le type de document
+                if (typeDocument === 'recu_client') {
+                    window.location.href = `/recu/${data.vente_id}/actes`;
+                } else if (typeDocument === 'recu_structure') {
+                    window.location.href = `/recu_structure/${data.vente_id}/actes`;
+                } else if (typeDocument === 'facture_client') {
+                    window.location.href = `/facture/${data.vente_id}/actes`;
+                } else if (typeDocument === 'facture_structure') {
+                    window.location.href = `/facture_structure/${data.vente_id}/actes`;
+                } else if (typeDocument === 'les_deux') {
+                    window.open(`/recu/${data.vente_id}/actes`, '_blank');
+                    window.open(`/recu_structure/${data.vente_id}/actes`, '_blank');
+                    window.location.href = "/dashboard";
+                } else {
+                    window.location.href = "/dashboard";
+                }
+            }, 500);
         } else {
+            hideProgress();
             alert('Erreur: ' + (data.error || 'Erreur inconnue'));
             btn.disabled = false;
             btn.innerHTML = originalText;
         }
     })
     .catch(error => {
+        clearInterval(progressInterval);
+        hideProgress();
         console.error('Erreur fetch:', error);
         alert('Erreur lors de la vente: ' + error);
         btn.disabled = false;
         btn.innerHTML = originalText;
     });
-}
-
-function chargerActes() {
-    showLoader();
-    
-    fetch('/api/actes')
-        .then(response => response.json())
-        .then(data => {
-            // Afficher les actes
-            hideLoader();
-        })
-        .catch(() => hideLoader());
 }
 // ========== INITIALISATION ==========
 window.onload = function() {

@@ -53,3 +53,59 @@
         {% endif %}
     </div>
 </div>
+
+<script>
+// Fonction pour afficher le loader (si pas déjà définie)
+function showLoader() {
+    let loader = document.getElementById('loaderOverlay');
+    if (!loader) {
+        // Créer le loader s'il n'existe pas
+        loader = document.createElement('div');
+        loader.id = 'loaderOverlay';
+        loader.className = 'loader-overlay';
+        loader.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999; display: flex; align-items: center; justify-content: center;';
+        loader.innerHTML = '<div class="loader" style="width: 50px; height: 50px; border: 5px solid #f3f3f3; border-top: 5px solid #667eea; border-radius: 50%; animation: spin 1s linear infinite;"></div>';
+        document.body.appendChild(loader);
+        
+        // Ajouter l'animation si elle n'existe pas
+        if (!document.querySelector('#loaderStyle')) {
+            const style = document.createElement('style');
+            style.id = 'loaderStyle';
+            style.textContent = '@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }';
+            document.head.appendChild(style);
+        }
+    }
+    loader.style.display = 'flex';
+}
+
+function hideLoader() {
+    const loader = document.getElementById('loaderOverlay');
+    if (loader) {
+        loader.style.display = 'none';
+    }
+}
+
+// Ajouter un loader sur tous les liens du menu
+document.querySelectorAll('.sidebar .nav-link').forEach(link => {
+    link.addEventListener('click', function(e) {
+        // Ne pas ajouter de loader si c'est un lien externe, # ou target _blank
+        const href = this.getAttribute('href');
+        if (href === '#' || href === 'javascript:void(0)' || this.getAttribute('target') === '_blank') {
+            return;
+        }
+        
+        // Afficher le loader
+        showLoader();
+    });
+});
+
+// Cacher le loader quand la page est complètement chargée
+window.addEventListener('load', function() {
+    hideLoader();
+});
+
+// Pour les pages qui chargent via AJAX, on peut aussi cacher le loader
+document.addEventListener('DOMContentLoaded', function() {
+    hideLoader();
+});
+</script>

@@ -22,13 +22,8 @@
                 </button>
             </li>
             <li class="nav-item" role="presentation">
-                <button class="nav-link" id="produits-tab" data-bs-toggle="tab" data-bs-target="#produits" type="button" role="tab">
-                    <i class="fas fa-pills"></i> Produits pharmacie
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="import-tab" data-bs-toggle="tab" data-bs-target="#import" type="button" role="tab">
-                    <i class="fas fa-file-excel"></i> Import Excel
+                <button class="nav-link" id="gestion-produits-tab" data-bs-toggle="tab" data-bs-target="#gestionProduits" type="button" role="tab">
+                    <i class="fas fa-boxes"></i> Produits & stocks
                 </button>
             </li>
             <li class="nav-item" role="presentation">
@@ -100,7 +95,7 @@
                 </div>
             </div>
 
-            <!-- ========== ONGLET ACTES MÉDICAUX AVEC RECHERCHE ========== -->
+            <!-- ========== ONGLET ACTES MÉDICAUX ========== -->
             <div class="tab-pane fade" id="actes" role="tabpanel">
                 <div class="card">
                     <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
@@ -110,11 +105,10 @@
                         </button>
                     </div>
                     <div class="card-body">
-                        <!-- Barre de recherche -->
                         <div class="mb-3">
                             <div class="input-group">
                                 <span class="input-group-text"><i class="fas fa-search"></i></span>
-                                <input type="text" class="form-control" id="searchActe" placeholder="Rechercher par nom ou code..." onkeyup="filterActes()">
+                                <input type="text" id="searchActe" class="form-control" placeholder="Rechercher par nom..." onkeyup="filterActes()">
                                 <button class="btn btn-outline-secondary" onclick="clearSearchActe()">✖</button>
                             </div>
                         </div>
@@ -159,66 +153,38 @@
                 </div>
             </div>
 
-            <!-- ========== ONGLET PRODUITS PHARMACIE AVEC RECHERCHE ========== -->
-            <div class="tab-pane fade" id="produits" role="tabpanel">
+            <!-- ========== ONGLET PRODUITS & STOCKS ========== -->
+            <div class="tab-pane fade" id="gestionProduits" role="tabpanel">
                 <div class="card">
-                    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-                        <h5><i class="fas fa-pills"></i> Catalogue des produits</h5>
+                    <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                        <h5><i class="fas fa-boxes"></i> Gestion des produits & stocks</h5>
                         <button class="btn btn-light btn-sm" onclick="showAddProduitModal()">
                             <i class="fas fa-plus"></i> Nouveau produit
                         </button>
                     </div>
                     <div class="card-body">
-                        <!-- Barre de recherche -->
                         <div class="mb-3">
                             <div class="input-group">
                                 <span class="input-group-text"><i class="fas fa-search"></i></span>
-                                <input type="text" class="form-control" id="searchProduit" placeholder="Rechercher par nom, code ou référence..." onkeyup="filterProduits()">
-                                <button class="btn btn-outline-secondary" onclick="clearSearchProduit()">✖</button>
+                                <input type="text" id="searchProduitAdmin" class="form-control" placeholder="Rechercher un produit..." onkeyup="filterProduitsAdmin()">
+                                <button class="btn btn-outline-secondary" onclick="clearSearchProduitAdmin()">✖</button>
                             </div>
                         </div>
                         <div class="table-responsive">
-                            <table class="table table-hover" id="produitsTable">
-                                <thead>
+                            <table class="table table-bordered table-hover">
+                                <thead class="table-light">
                                     <tr>
-                                        <th>ID</th>
                                         <th>Code</th>
                                         <th>Nom</th>
-                                        <th>Prix (FCFA)</th>
+                                        <th>Prix vente</th>
+                                        <th>Prix achat</th>
                                         <th>Stock</th>
+                                        <th>Seuil</th>
                                         <th>Actions</th>
                                     </tr>
                                 </thead>
-                                <tbody id="produitsList">
-                                    {% for produit in produits %}
-                                    <tr class="produit-row">
-                                        <td>{{ produit.ID }}</td>
-                                        <td><span class="badge bg-secondary">PRD-{{ produit.ID }}</span></td>
-                                        <td><strong>{{ produit.nom }}</strong></td>
-                                        <td>{{ produit.prix_vente }} FCFA</td>
-                                        <td>
-                                            {% if produit.quantite_stock|int <= 10 %}
-                                                <span class="badge bg-danger">{{ produit.quantite_stock }} unités</span>
-                                            {% elif produit.quantite_stock|int <= 30 %}
-                                                <span class="badge bg-warning">{{ produit.quantite_stock }} unités</span>
-                                            {% else %}
-                                                <span class="badge bg-success">{{ produit.quantite_stock }} unités</span>
-                                            {% endif %}
-                                        </td>
-                                        <td>
-                                            <button class="btn btn-sm btn-warning" onclick='editProduit({{ produit.ID }}, "{{ produit.nom|replace("'", "\\'") }}", {{ produit.prix_vente }}, {{ produit.quantite_stock }})'>
-                                                <i class="fas fa-edit"></i>
-                                            </button>
-                                            <button class="btn btn-sm btn-danger" onclick="deleteProduit({{ produit.ID }})">
-                                                <i class="fas fa-trash"></i>
-                                            </button>
-                                        </td>
-                                    </tr>
-                                    {% else %}
-                                    <tr>
-                                        <td colspan="6" class="text-center">Aucun produit</td>
-                                    </tr>
-                                    {% endfor %}
+                                <tbody id="produitsAdminList">
+                                    <tr><td colspan="7" class="text-center">Chargement...</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -226,58 +192,6 @@
                 </div>
             </div>
 
-<!-- ========== ONGLET IMPORT EXCEL ========== -->
-<div class="tab-pane fade" id="import" role="tabpanel">
-    <div class="card">
-        <div class="card-header bg-warning text-white">
-            <h5><i class="fas fa-file-excel"></i> Importation depuis Excel</h5>
-        </div>
-        <div class="card-body">
-            <div class="row">
-                <!-- Import Actes -->
-                <div class="col-md-6">
-                    <div class="card border-primary mb-3">
-                        <div class="card-header bg-primary text-white">
-                            <i class="fas fa-stethoscope"></i> Actes médicaux
-                        </div>
-                        <div class="card-body">
-                            <p class="text-muted">Format attendu : code, nom, prix, description</p>
-                            <input type="file" id="fileActes" class="form-control mb-2" accept=".xlsx, .xls, .csv">
-                            <button class="btn btn-primary w-100" onclick="importerActes()">
-                                <i class="fas fa-upload"></i> Importer les actes
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Import Produits -->
-                <div class="col-md-6">
-                    <div class="card border-success mb-3">
-                        <div class="card-header bg-success text-white">
-                            <i class="fas fa-pills"></i> Produits pharmacie
-                        </div>
-                        <div class="card-body">
-                            <p class="text-muted">Format attendu : code, nom, prix, stock</p>
-                            <input type="file" id="fileProduits" class="form-control mb-2" accept=".xlsx, .xls, .csv">
-                            <button class="btn btn-success w-100" onclick="importerProduits()">
-                                <i class="fas fa-upload"></i> Importer les produits
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Barre de progression -->
-            <div id="importProgress" style="display:none;" class="mt-3">
-                <div class="progress">
-                    <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" 
-                         style="width: 0%">0%</div>
-                </div>
-                <p id="progressMessage" class="mt-2 text-muted"></p>
-            </div>
-        </div>
-    </div>
-</div>
             <!-- ========== ONGLET MA STRUCTURE ========== -->
             <div class="tab-pane fade" id="structure" role="tabpanel">
                 <div class="card">
@@ -317,7 +231,7 @@
     </div>
 </div>
 
-<!-- Modal Ajouter/Modifier Utilisateur -->
+<!-- Modal Utilisateur -->
 <div class="modal fade" id="userModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -352,8 +266,8 @@
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-                <button type="button" class="btn btn-primary" onclick="saveUser()">Enregistrer</button>
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button class="btn btn-primary" onclick="saveUser()">Enregistrer</button>
             </div>
         </div>
     </div>
@@ -371,7 +285,7 @@
                 <form id="acteForm">
                     <input type="hidden" id="acteId">
                     <div class="mb-3">
-                        <label class="form-label">Nom de l'acte</label>
+                        <label class="form-label">Nom</label>
                         <input type="text" class="form-control" id="acteNom" required>
                     </div>
                     <div class="mb-3">
@@ -389,8 +303,8 @@
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-                <button type="button" class="btn btn-primary" onclick="saveActe()">Enregistrer</button>
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button class="btn btn-primary" onclick="saveActe()">Enregistrer</button>
             </div>
         </div>
     </div>
@@ -400,106 +314,344 @@
 <div class="modal fade" id="produitModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
-            <div class="modal-header bg-primary text-white">
+            <div class="modal-header bg-success text-white">
                 <h5 class="modal-title" id="produitModalTitle">Ajouter un produit</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
                 <form id="produitForm">
                     <input type="hidden" id="produitId">
-                    <div class="mb-3">
-                        <label class="form-label">Nom du produit</label>
-                        <input type="text" class="form-control" id="produitNom" required>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Code</label>
+                            <input type="text" class="form-control" id="produitCode">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Nom</label>
+                            <input type="text" class="form-control" id="produitNom" required>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Prix vente (FCFA)</label>
+                            <input type="number" class="form-control" id="produitPrixVente" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Prix achat (FCFA)</label>
+                            <input type="number" class="form-control" id="produitPrixAchat">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Stock initial</label>
+                            <input type="number" class="form-control" id="produitStock" value="0">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Seuil d'alerte</label>
+                            <input type="number" class="form-control" id="produitSeuil" value="10">
+                        </div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Code</label>
-                        <input type="text" class="form-control" id="produitCode" placeholder="PRD-XXX">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Prix de vente (FCFA)</label>
-                        <input type="number" class="form-control" id="produitPrix" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Stock initial</label>
-                        <input type="number" class="form-control" id="produitStock" value="0">
+                        <label class="form-label">Unité</label>
+                        <select class="form-control" id="produitUnite">
+                            <option value="unité">Unité</option>
+                            <option value="comprimé">Comprimé</option>
+                            <option value="gélule">Gélule</option>
+                            <option value="sachet">Sachet</option>
+                            <option value="boîte">Boîte</option>
+                            <option value="flacon">Flacon</option>
+                        </select>
                     </div>
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-                <button type="button" class="btn btn-primary" onclick="saveProduit()">Enregistrer</button>
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button class="btn btn-success" onclick="saveProduit()">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Approvisionnement -->
+<div class="modal fade" id="approModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-warning">
+                <h5 class="modal-title"><i class="fas fa-truck"></i> Approvisionnement</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="approProduitId">
+                <div class="mb-3">
+                    <label class="form-label">Produit</label>
+                    <input type="text" class="form-control" id="approProduitNom" readonly>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Quantité à ajouter</label>
+                    <input type="number" class="form-control" id="approQuantite" min="1">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button class="btn btn-warning" onclick="validerApprovisionnement()">Approvisionner</button>
             </div>
         </div>
     </div>
 </div>
 
 <script>
-// ========== RECHERCHE POUR ACTES ==========
+// ========== FILTRES ACTES ==========
 function filterActes() {
-    let input = document.getElementById('searchActe');
-    let filter = input.value.toLowerCase();
-    let table = document.getElementById('actesTable');
-    let rows = table.getElementsByTagName('tr');
+    const filter = document.getElementById('searchActe').value.toLowerCase();
+    const rows = document.querySelectorAll('#actesTable tbody tr');
+    rows.forEach(row => {
+        const text = row.innerText.toLowerCase();
+        row.style.display = text.includes(filter) ? '' : 'none';
+    });
+}
+
+function clearSearchActe() { 
+    document.getElementById('searchActe').value = ''; 
+    filterActes(); 
+}
+
+// ========== GESTION PRODUITS & STOCKS ==========
+let tousLesProduits = [];
+
+function chargerProduitsAdmin() {
+    fetch('/api/produits')
+        .then(r => r.json())
+        .then(data => { 
+            tousLesProduits = data; 
+            afficherProduitsAdmin(data); 
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            document.getElementById('produitsAdminList').innerHTML = '<tr><td colspan="7" class="text-center text-danger">Erreur de chargement</td></tr>';
+        });
+}
+
+function afficherProduitsAdmin(produits) {
+    const tbody = document.getElementById('produitsAdminList');
+    tbody.innerHTML = '';
     
-    for (let i = 1; i < rows.length; i++) {
-        let row = rows[i];
-        let idCell = row.cells[0];
-        let codeCell = row.cells[1];
-        let nameCell = row.cells[2];
-        
-        if (idCell && nameCell && codeCell) {
-            let idValue = idCell.textContent || idCell.innerText;
-            let codeValue = codeCell.textContent || codeCell.innerText;
-            let nameValue = nameCell.textContent || nameCell.innerText;
-            
-            if (idValue.toLowerCase().indexOf(filter) > -1 ||
-                codeValue.toLowerCase().indexOf(filter) > -1 ||
-                nameValue.toLowerCase().indexOf(filter) > -1) {
-                row.style.display = "";
-            } else {
-                row.style.display = "none";
-            }
+    if (!produits || produits.length === 0) { 
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center">Aucun produit</td></tr>'; 
+        return; 
+    }
+    
+    produits.forEach(p => {
+        const stockClass = p.quantite_stock <= p.seuil_alerte ? 'text-danger fw-bold' : '';
+        tbody.innerHTML += `
+            <tr>
+                <td>${p.code || '-'}</td>
+                <td><strong>${p.nom}</strong></td>
+                <td>${parseInt(p.prix_vente).toLocaleString()} F</td>
+                <td>${p.prix_achat ? parseInt(p.prix_achat).toLocaleString() + ' F' : '-'}</td>
+                <td class="${stockClass}">${p.quantite_stock}</td>
+                <td>${p.seuil_alerte}</td>
+                <td>
+                    <button class="btn btn-sm btn-info" onclick="approvisionner(${p.id}, '${p.nom.replace(/'/g, "\\'")}')" title="Approvisionner">
+                        <i class="fas fa-truck"></i>
+                    </button>
+                    <button class="btn btn-sm btn-warning" onclick="modifierProduit(${p.id})" title="Modifier">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="supprimerProduit(${p.id})" title="Supprimer">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+}
+
+function filterProduitsAdmin() {
+    const search = document.getElementById('searchProduitAdmin').value.toLowerCase();
+    const filtered = tousLesProduits.filter(p => 
+        p.nom.toLowerCase().includes(search) || 
+        (p.code && p.code.toLowerCase().includes(search))
+    );
+    afficherProduitsAdmin(filtered);
+}
+
+function clearSearchProduitAdmin() { 
+    document.getElementById('searchProduitAdmin').value = ''; 
+    afficherProduitsAdmin(tousLesProduits); 
+}
+
+function showAddProduitModal() {
+    document.getElementById('produitModalTitle').innerText = 'Ajouter un produit';
+    document.getElementById('produitId').value = '';
+    document.getElementById('produitForm').reset();
+    document.getElementById('produitStock').value = '0';
+    document.getElementById('produitSeuil').value = '10';
+    new bootstrap.Modal(document.getElementById('produitModal')).show();
+}
+
+function modifierProduit(id) {
+    const p = tousLesProduits.find(p => p.id == id);
+    if (!p) return;
+    document.getElementById('produitModalTitle').innerText = 'Modifier le produit';
+    document.getElementById('produitId').value = p.id;
+    document.getElementById('produitCode').value = p.code || '';
+    document.getElementById('produitNom').value = p.nom;
+    document.getElementById('produitPrixVente').value = p.prix_vente;
+    document.getElementById('produitPrixAchat').value = p.prix_achat || '';
+    document.getElementById('produitStock').value = p.quantite_stock;
+    document.getElementById('produitSeuil').value = p.seuil_alerte;
+    document.getElementById('produitUnite').value = p.unite || 'unité';
+    new bootstrap.Modal(document.getElementById('produitModal')).show();
+}
+
+function saveProduit() {
+    const id = document.getElementById('produitId').value;
+    const produit = {
+        code: document.getElementById('produitCode').value,
+        nom: document.getElementById('produitNom').value,
+        prix_vente: parseInt(document.getElementById('produitPrixVente').value),
+        prix_achat: parseInt(document.getElementById('produitPrixAchat').value) || 0,
+        quantite_stock: parseInt(document.getElementById('produitStock').value),
+        seuil_alerte: parseInt(document.getElementById('produitSeuil').value),
+        unite: document.getElementById('produitUnite').value
+    };
+    
+    if (!produit.nom || !produit.prix_vente) {
+        alert('Veuillez remplir tous les champs obligatoires');
+        return;
+    }
+    
+    const url = id ? `/api/admin/produits/${id}` : '/api/admin/produits';
+    const method = id ? 'PUT' : 'POST';
+    
+    fetch(url, { 
+        method: method, 
+        headers: {'Content-Type': 'application/json'}, 
+        body: JSON.stringify(produit) 
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert(id ? '✓ Produit modifié' : '✓ Produit ajouté');
+            bootstrap.Modal.getInstance(document.getElementById('produitModal')).hide();
+            chargerProduitsAdmin();
+            if (typeof chargerProduits === 'function') chargerProduits();
+        } else {
+            alert('Erreur: ' + (data.error || 'Erreur inconnue'));
         }
+    })
+    .catch(error => {
+        alert('Erreur: ' + error);
+    });
+}
+
+function approvisionner(id, nom) {
+    document.getElementById('approProduitId').value = id;
+    document.getElementById('approProduitNom').value = nom;
+    document.getElementById('approQuantite').value = '';
+    new bootstrap.Modal(document.getElementById('approModal')).show();
+}
+
+function validerApprovisionnement() {
+    const id = document.getElementById('approProduitId').value;
+    const quantite = parseInt(document.getElementById('approQuantite').value);
+    
+    if (!quantite || quantite <= 0) { 
+        alert('Veuillez entrer une quantité valide'); 
+        return; 
+    }
+    
+    fetch(`/api/produits/${id}/approvisionner`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({quantite: quantite})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert(`✓ ${quantite} unité(s) ajoutée(s) au stock`);
+            bootstrap.Modal.getInstance(document.getElementById('approModal')).hide();
+            chargerProduitsAdmin();
+            if (typeof chargerProduits === 'function') chargerProduits();
+        } else {
+            alert('Erreur: ' + (data.error || 'Erreur inconnue'));
+        }
+    });
+}
+
+function supprimerProduit(id) {
+    if (confirm('Supprimer définitivement ce produit ?')) {
+        fetch(`/api/admin/produits/${id}`, { method: 'DELETE' })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) { 
+                    chargerProduitsAdmin(); 
+                    if (typeof chargerProduits === 'function') chargerProduits(); 
+                } else {
+                    alert('Erreur: ' + (data.error || 'Erreur inconnue'));
+                }
+            });
     }
 }
 
-function clearSearchActe() {
-    document.getElementById('searchActe').value = '';
-    filterActes();
+// ========== GESTION ACTES ==========
+function showAddActeModal() {
+    document.getElementById('acteModalTitle').innerText = 'Ajouter un acte';
+    document.getElementById('acteId').value = '';
+    document.getElementById('acteForm').reset();
+    new bootstrap.Modal(document.getElementById('acteModal')).show();
 }
 
-// ========== RECHERCHE POUR PRODUITS ==========
-function filterProduits() {
-    let input = document.getElementById('searchProduit');
-    let filter = input.value.toLowerCase();
-    let table = document.getElementById('produitsTable');
-    let rows = table.getElementsByTagName('tr');
+function editActe(id, nom, prix, description) {
+    document.getElementById('acteModalTitle').innerText = "Modifier l'acte";
+    document.getElementById('acteId').value = id;
+    document.getElementById('acteNom').value = nom;
+    document.getElementById('actePrix').value = prix;
+    document.getElementById('acteDescription').value = description || '';
+    new bootstrap.Modal(document.getElementById('acteModal')).show();
+}
+
+function saveActe() {
+    const data = {
+        id: document.getElementById('acteId').value,
+        nom: document.getElementById('acteNom').value,
+        code: document.getElementById('acteCode').value,
+        prix: parseInt(document.getElementById('actePrix').value),
+        description: document.getElementById('acteDescription').value
+    };
     
-    for (let i = 1; i < rows.length; i++) {
-        let row = rows[i];
-        let idCell = row.cells[0];
-        let codeCell = row.cells[1];
-        let nameCell = row.cells[2];
-        
-        if (idCell && nameCell && codeCell) {
-            let idValue = idCell.textContent || idCell.innerText;
-            let codeValue = codeCell.textContent || codeCell.innerText;
-            let nameValue = nameCell.textContent || nameCell.innerText;
-            
-            if (idValue.toLowerCase().indexOf(filter) > -1 ||
-                codeValue.toLowerCase().indexOf(filter) > -1 ||
-                nameValue.toLowerCase().indexOf(filter) > -1) {
-                row.style.display = "";
-            } else {
-                row.style.display = "none";
-            }
-        }
+    if (!data.nom || !data.prix) {
+        alert('Veuillez remplir tous les champs obligatoires');
+        return;
     }
+    
+    fetch('/api/admin/actes', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(data => { 
+        if(data.success) {
+            location.reload();
+        } else {
+            alert('Erreur: ' + (data.error || 'Erreur inconnue'));
+        }
+    });
 }
 
-function clearSearchProduit() {
-    document.getElementById('searchProduit').value = '';
-    filterProduits();
+function deleteActe(id) {
+    if (confirm('Supprimer cet acte ?')) {
+        fetch(`/api/admin/actes/${id}`, { method: 'DELETE' })
+            .then(r => r.json())
+            .then(data => { 
+                if(data.success) {
+                    location.reload();
+                } else {
+                    alert('Erreur: ' + (data.error || 'Erreur inconnue'));
+                }
+            });
+    }
 }
 
 // ========== GESTION UTILISATEURS ==========
@@ -519,127 +671,37 @@ function saveUser() {
         role: document.getElementById('userRole').value
     };
     
+    if (!data.nom || !data.email) {
+        alert('Veuillez remplir tous les champs obligatoires');
+        return;
+    }
+    
     fetch('/api/admin/users', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(data)
     })
-    .then(response => response.json())
-    .then(data => {
+    .then(r => r.json())
+    .then(data => { 
         if(data.success) {
             location.reload();
         } else {
-            alert('Erreur: ' + data.error);
+            alert('Erreur: ' + (data.error || 'Erreur inconnue'));
         }
     });
 }
 
 function deleteUser(id) {
-    if(confirm('Supprimer cet utilisateur ?')) {
-        fetch(`/api/admin/users/${id}`, {method: 'DELETE'})
-        .then(response => response.json())
-        .then(data => {
-            if(data.success) location.reload();
-            else alert('Erreur');
-        });
-    }
-}
-
-// ========== GESTION ACTES ==========
-function showAddActeModal() {
-    document.getElementById('acteModalTitle').innerText = 'Ajouter un acte';
-    document.getElementById('acteId').value = '';
-    document.getElementById('acteForm').reset();
-    new bootstrap.Modal(document.getElementById('acteModal')).show();
-}
-
-function editActe(id, nom, prix, description) {
-    document.getElementById('acteModalTitle').innerText = 'Modifier l\'acte';
-    document.getElementById('acteId').value = id;
-    document.getElementById('acteNom').value = nom;
-    document.getElementById('actePrix').value = prix;
-    document.getElementById('acteDescription').value = description || '';
-    new bootstrap.Modal(document.getElementById('acteModal')).show();
-}
-
-function saveActe() {
-    const data = {
-        id: document.getElementById('acteId').value,
-        nom: document.getElementById('acteNom').value,
-        code: document.getElementById('acteCode').value,
-        prix: document.getElementById('actePrix').value,
-        description: document.getElementById('acteDescription').value
-    };
-    
-    fetch('/api/admin/actes', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
-    })
-    .then(response => response.json())
-    .then(data => {
-        if(data.success) location.reload();
-        else alert('Erreur: ' + data.error);
-    });
-}
-
-function deleteActe(id) {
-    if(confirm('Supprimer cet acte ?')) {
-        fetch(`/api/admin/actes/${id}`, {method: 'DELETE'})
-        .then(response => response.json())
-        .then(data => {
-            if(data.success) location.reload();
-            else alert('Erreur');
-        });
-    }
-}
-
-// ========== GESTION PRODUITS ==========
-function showAddProduitModal() {
-    document.getElementById('produitModalTitle').innerText = 'Ajouter un produit';
-    document.getElementById('produitId').value = '';
-    document.getElementById('produitForm').reset();
-    new bootstrap.Modal(document.getElementById('produitModal')).show();
-}
-
-function editProduit(id, nom, prix, stock) {
-    document.getElementById('produitModalTitle').innerText = 'Modifier le produit';
-    document.getElementById('produitId').value = id;
-    document.getElementById('produitNom').value = nom;
-    document.getElementById('produitPrix').value = prix;
-    document.getElementById('produitStock').value = stock;
-    new bootstrap.Modal(document.getElementById('produitModal')).show();
-}
-
-function saveProduit() {
-    const data = {
-        id: document.getElementById('produitId').value,
-        nom: document.getElementById('produitNom').value,
-        code: document.getElementById('produitCode').value,
-        prix: document.getElementById('produitPrix').value,
-        stock: document.getElementById('produitStock').value
-    };
-    
-    fetch('/api/admin/produits', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
-    })
-    .then(response => response.json())
-    .then(data => {
-        if(data.success) location.reload();
-        else alert('Erreur: ' + data.error);
-    });
-}
-
-function deleteProduit(id) {
-    if(confirm('Supprimer ce produit ?')) {
-        fetch(`/api/admin/produits/${id}`, {method: 'DELETE'})
-        .then(response => response.json())
-        .then(data => {
-            if(data.success) location.reload();
-            else alert('Erreur');
-        });
+    if (confirm('Supprimer cet utilisateur ?')) {
+        fetch(`/api/admin/users/${id}`, { method: 'DELETE' })
+            .then(r => r.json())
+            .then(data => { 
+                if(data.success) {
+                    location.reload();
+                } else {
+                    alert('Erreur: ' + (data.error || 'Erreur inconnue'));
+                }
+            });
     }
 }
 
@@ -659,89 +721,20 @@ document.getElementById('structureForm').addEventListener('submit', function(e) 
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(data)
     })
-    .then(response => response.json())
-    .then(data => {
+    .then(r => r.json())
+    .then(data => { 
         if(data.success) {
-            alert('Informations mises à jour');
+            alert('✓ Structure mise à jour');
             location.reload();
         } else {
-            alert('Erreur: ' + data.error);
+            alert('Erreur: ' + (data.error || 'Erreur inconnue'));
         }
     });
 });
 
-function importerActes() {
-    const file = document.getElementById('fileActes').files[0];
-    if (!file) {
-        alert('Veuillez sélectionner un fichier Excel');
-        return;
-    }
-    
-    const formData = new FormData();
-    formData.append('file', file);
-    
-    document.getElementById('importProgress').style.display = 'block';
-    document.getElementById('progressBar').style.width = '30%';
-    document.getElementById('progressBar').innerHTML = '30%';
-    document.getElementById('progressMessage').innerHTML = 'Importation des actes en cours...';
-    
-    fetch('/api/import/actes', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        document.getElementById('progressBar').style.width = '100%';
-        document.getElementById('progressBar').innerHTML = '100%';
-        document.getElementById('progressMessage').innerHTML = data.message;
-        
-        setTimeout(() => {
-            document.getElementById('importProgress').style.display = 'none';
-            alert(data.message);
-            location.reload();
-        }, 2000);
-    })
-    .catch(error => {
-        document.getElementById('progressMessage').innerHTML = 'Erreur: ' + error;
-        alert('Erreur lors de l\'importation');
-    });
-}
-
-function importerProduits() {
-    const file = document.getElementById('fileProduits').files[0];
-    if (!file) {
-        alert('Veuillez sélectionner un fichier Excel');
-        return;
-    }
-    
-    const formData = new FormData();
-    formData.append('file', file);
-    
-    document.getElementById('importProgress').style.display = 'block';
-    document.getElementById('progressBar').style.width = '30%';
-    document.getElementById('progressBar').innerHTML = '30%';
-    document.getElementById('progressMessage').innerHTML = 'Importation des produits en cours...';
-    
-    fetch('/api/import/produits', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        document.getElementById('progressBar').style.width = '100%';
-        document.getElementById('progressBar').innerHTML = '100%';
-        document.getElementById('progressMessage').innerHTML = data.message;
-        
-        setTimeout(() => {
-            document.getElementById('importProgress').style.display = 'none';
-            alert(data.message);
-            location.reload();
-        }, 2000);
-    })
-    .catch(error => {
-        document.getElementById('progressMessage').innerHTML = 'Erreur: ' + error;
-        alert('Erreur lors de l\'importation');
-    });
-}
+// Initialisation
+document.addEventListener('DOMContentLoaded', function() {
+    chargerProduitsAdmin();
+});
 </script>
 {% endblock %}

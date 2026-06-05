@@ -571,26 +571,28 @@ function selectPatient(id, nom, assurance, taux) {
         return;
     }
     
-    // Stocker les données (assurance garde sa valeur personnalisée)
+    // Nettoyer les anciennes données
+    sessionStorage.removeItem('selectedPatientId');
+    sessionStorage.removeItem('selectedPatientName');
+    sessionStorage.removeItem('selectedPatientAssurance');
+    sessionStorage.removeItem('selectedPatientTaux');
+    
+    // Définir les nouvelles données
     sessionStorage.setItem('selectedPatientId', id);
     sessionStorage.setItem('selectedPatientName', nom);
-    sessionStorage.setItem('selectedPatientAssurance', assurance);  // ← GTA, CNPS, etc.
+    sessionStorage.setItem('selectedPatientAssurance', assurance);
     sessionStorage.setItem('selectedPatientTaux', taux);
+    
+    console.log('Patient sélectionné:', { id, nom, assurance, taux });
     
     alert(`✅ Patient sélectionné : ${nom}\nAssurance : ${assurance}\nTaux : ${taux}%`);
     
-    let choix = confirm(
-        "OK → Actes médicaux\n" +
-        "Annuler → Pharmacie"
-    );
-    
-    if (choix) {
+    if (confirm('Aller à la vente d\'actes ?')) {
         window.location.href = '/actes_vente';
-    } else {
+    } else if (confirm('Aller à la pharmacie ?')) {
         window.location.href = '/pharma_vente';
     }
 }
-
 // ========== ENVOI LIEN WHATSAPP ==========
 function envoyerLienPatient(id, nom, telephone) {
     if (!id || id === 'undefined') {

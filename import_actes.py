@@ -1,5 +1,17 @@
-from db_helper import db
+from app import app, db
+import json
 
-result = db.execute_query("SELECT id, nom, type_assurance, taux_prise_charge FROM patients")
-for r in result:
-    print(f"ID: {r['id']}, Assurance: {r['type_assurance']}, Taux: {r['taux_prise_charge']}")
+with app.app_context():
+    result = db.execute_query("""
+        INSERT INTO ventes (patient_id, patient_nom, structure_id, type, 
+                           sous_total, prise_en_charge, net_a_payer, 
+                           mode_paiement, taux_assurance, date_vente, actes)
+        VALUES (2, 'TEST FINAL', 1, 'actes', 10000, 8000, 2000, 'especes', 80, NOW(), %s::jsonb)
+        RETURNING id
+    """, (json.dumps([{"nom": "Test Final", "prix": 10000, "quantite": 1, "total": 10000}]),))
+    
+    print(f"ID inséré: {result}")
+    
+    # Vérifier
+    check = db.execute_query("SELECT id, type FROM ventes WHERE id = %s", (result[0]['id'],))
+    print(f"Vérification: {check}")

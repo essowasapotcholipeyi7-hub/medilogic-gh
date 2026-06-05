@@ -648,18 +648,73 @@ function imprimerStats() {
 function chargerHistorique() {
     showLoader();
     
-    Promise.all([
-        fetch('/api/ventes/actes').then(r => r.json()),
-        fetch('/api/ventes/pharma').then(r => r.json())
-    ]).then(([actes, pharma]) => {
-        // Afficher l'historique
-        hideLoader();
-    }).catch(() => hideLoader());
+    fetch('/api/ventes/all')
+        .then(response => response.json())
+        .then(ventes => {
+            const tbody = document.getElementById('ventesList');
+            tbody.innerHTML = '';
+            
+            if (!ventes || ventes.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center">Aucune vente enregistrée</td</tr';
+                document.getElementById('resultCount').innerText = '0';
+                hideLoader();
+                return;
+            }
+            
+            ventes.forEach(vente => {
+                const row = tbody.insertRow();
+                const dateStr = vente.date ? new Date(vente.date).toLocaleString('fr-FR') : '-';
+                const dateOnly = vente.date ? vente.date.split('T')[0] : '';
+                
+                row.setAttribute('data-date', dateOnly);
+                row.setAttribute('data-type', vente.type);
+                row.setAttribute('data-montant', vente.net_a_payer);
+                row.setAttribute('data-patient', (vente.patient_nom || '').toLowerCase());
+                row.setAttribute('data-detail', (vente.detail || '').toLowerCase());
+                
+                // ID
+                row.insertCell(0).innerHTML = vente.ID;
+                // Date
+                row.insertCell(1).innerHTML = dateStr;
+                // Patient
+                row.insertCell(2).innerHTML = vente.patient_nom || '-';
+                // Type
+                const typeCell = row.insertCell(3);
+                if (vente.type === 'actes') {
+                    typeCell.innerHTML = '<span class="badge bg-primary">🏥 Acte</span>';
+                } else {
+                    typeCell.innerHTML = '<span class="badge bg-success">💊 Pharmacie</span>';
+                }
+                // Détail
+                row.insertCell(4).innerHTML = `<small>${vente.detail || '-'}</small>`;
+                // Montant
+                row.insertCell(5).innerHTML = `${Math.round(vente.net_a_payer).toLocaleString()} FCFA`;
+                // Assurance
+                row.insertCell(6).innerHTML = `${vente.taux_assurance || 0}%`;
+                // Actions
+                const actionCell = row.insertCell(7);
+                actionCell.innerHTML = `<button class="btn btn-sm btn-outline-secondary" onclick="reimprimer(${vente.ID}, '${vente.type}')">
+                                            <i class="fas fa-print"></i>
+                                        </button>`;
+            });
+            
+            // Mettre à jour les stats et filtres
+            document.getElementById('resultCount').innerText = ventes.length;
+            changerPeriodeStats(periodeStatsCourante);
+            filtrerHistorique();
+            hideLoader();
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            document.getElementById('ventesList').innerHTML = '<tr><td colspan="8" class="text-center text-danger">Erreur de chargement des ventes</td</tr';
+            hideLoader();
+        });
 }
+
 // ========== INITIALISATION ==========
 document.addEventListener('DOMContentLoaded', function() {
-    changerPeriodeStats('tous');
-    filtrerHistorique();
+    chargerHistorique();  // ← Utilise cette fonction au lieu de changerPeriodeStats
 });
+
 </script>
 {% endblock %}

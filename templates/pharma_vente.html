@@ -5,13 +5,27 @@
 {% block content %}
 <div class="row">
     <div class="col-md-3 mb-4">
-        {% include 'sidebar_menu.html' %}
+        <div class="sidebar">
+            <h5 class="mb-3"><i class="fas fa-chart-line"></i> Menu</h5>
+            <div class="nav flex-column">
+                <a class="nav-link" href="{{ url_for('dashboard') }}"><i class="fas fa-tachometer-alt"></i> Tableau de bord</a>
+                <a class="nav-link" href="{{ url_for('patients') }}"><i class="fas fa-users"></i> Patients</a>
+                <a class="nav-link" href="{{ url_for('actes_vente') }}"><i class="fas fa-stethoscope"></i> LABO/RADIO/Actes & Vente</a>
+                <a class="nav-link active" href="{{ url_for('pharma_vente') }}"><i class="fas fa-pills"></i> Pharmacie</a>
+                <a class="nav-link" href="{{ url_for('historique_ventes') }}"><i class="fas fa-history"></i> Historique</a>
+                <a class="nav-link" href="{{ url_for('rendez_vous') }}"><i class="fas fa-calendar-alt"></i> Rendez-vous</a>
+                <a class="nav-link" href="{{ url_for('rappels_rendez_vous') }}"><i class="fas fa-bell"></i> Rappels</a>
+                {% if session.is_admin %}
+                <a class="nav-link" href="{{ url_for('admin_structure') }}"><i class="fas fa-cog"></i> Administration</a>
+                {% endif %}
+            </div>
+        </div>
     </div>
 
     <div class="col-md-9">
         <!-- Info patient sélectionné -->
         <div class="alert alert-info" id="patientInfo" style="display:none;">
-            <div class="row">
+            <div class="row align-items-center">
                 <div class="col-md-5">
                     <strong><i class="fas fa-user"></i> Patient :</strong> <span id="selectedPatientName"></span>
                 </div>
@@ -33,7 +47,21 @@
             Veuillez d'abord sélectionner un patient dans la <a href="{{ url_for('patients') }}">liste des patients</a>
         </div>
 
-        <div class="card mt-3">
+        <!-- Carte de suivi des stocks -->
+        <div class="card mb-3">
+            <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-boxes"></i> Suivi des stocks</h5>
+                <button class="btn btn-light btn-sm" onclick="chargerStocks()">
+                    <i class="fas fa-sync-alt"></i> Actualiser
+                </button>
+            </div>
+            <div class="card-body" id="stockAlertList">
+                <div class="text-center">Chargement des stocks...</div>
+            </div>
+        </div>
+
+        <!-- Vente de produits -->
+        <div class="card">
             <div class="card-header bg-success text-white">
                 <h5><i class="fas fa-pills"></i> Vente de produits</h5>
             </div>
@@ -46,7 +74,7 @@
                                 <i class="fas fa-search text-success"></i>
                             </span>
                             <input type="text" id="searchProduitInput" class="form-control border-start-0" 
-                                   placeholder="Rechercher un médicament..." 
+                                   placeholder="Rechercher un produit..." 
                                    onkeyup="filterProduits()">
                             <button class="btn btn-outline-secondary" onclick="clearProduitSearch()" type="button">
                                 <i class="fas fa-times"></i>
@@ -63,11 +91,6 @@
                         <label class="form-label">Sélectionner un produit</label>
                         <select class="form-control" id="produitSelect" size="8">
                             <option value="">-- Choisir un produit --</option>
-                            {% for produit in produits %}
-                            <option value="{{ produit.ID }}" data-prix="{{ produit.prix_vente }}" data-nom="{{ produit.nom }}" data-stock="{{ produit.quantite_stock }}">
-                                {{ produit.nom }} - {{ produit.prix_vente }} FCFA (Stock: {{ produit.quantite_stock }})
-                            </option>
-                            {% endfor %}
                         </select>
                     </div>
                     <div class="col-md-3">
@@ -97,22 +120,33 @@
 
                 <hr>
 
-                <h6>Panier des produits</h6>
+                <div class="row mb-2">
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-shopping-cart"></i> Panier des produits</h6>
+                    </div>
+                    <div class="col-md-6 text-end">
+                        <button class="btn btn-sm btn-danger" onclick="viderPanier()">
+                            <i class="fas fa-trash-alt"></i> Vider le panier
+                        </button>
+                        <span id="panierBadge" class="badge bg-primary rounded-pill ms-2" style="display:none;">0</span>
+                    </div>
+                </div>
+
                 <div class="table-responsive">
                     <table class="table table-bordered" id="panierTable">
-                        <thead>
+                        <thead class="table-dark">
                             <tr>
-                                <th>Produit</th>
-                                <th>Prix unitaire (FCFA)</th>
-                                <th>Quantité</th>
-                                <th>Total (FCFA)</th>
-                                <th>Action</th>
+                                <th style="width: 35%">Produit</th>
+                                <th style="width: 20%" class="text-center">Prix unitaire (FCFA)</th>
+                                <th style="width: 20%" class="text-center">Quantité</th>
+                                <th style="width: 15%" class="text-end">Total (FCFA)</th>
+                                <th style="width: 10%" class="text-center">Action</th>
                             </tr>
                         </thead>
                         <tbody id="panierBody">
-                            <tr><td colspan="5" class="text-center">Aucun produit dans le panier</td</tr>
+                            <tr><td colspan="5" class="text-center">Aucun produit dans le panier</td</tr
                         </tbody>
-                        <tfoot>
+                        <tfoot class="table-light">
                             <tr>
                                 <th colspan="3" class="text-end">Sous-total :</th>
                                 <th id="sousTotal" class="text-end">0 FCFA</th>
@@ -138,8 +172,8 @@
                         <select class="form-control" id="modePaiement">
                             <option value="especes">💰 Espèces</option>
                             <option value="carte">💳 Carte bancaire</option>
-                            <option value="Moov_Money">📱 FLOOZ</option>
-                            <option value="Mixx_By_Yas">📱 MIXX By YAS</option>
+                            <option value="orange_money">📱 Orange Money</option>
+                            <option value="mtn_money">📱 MTN Money</option>
                             <option value="cheque">📝 Chèque</option>
                         </select>
                     </div>
@@ -150,13 +184,13 @@
                             <option value="recu_structure">📋 Reçu Structure (copie)</option>
                             <option value="facture_client">📑 Facture Patient</option>
                             <option value="facture_structure">🗄️ Facture Structure (archive)</option>
-                            <option value="les_deux">📄+📑 Les deux (Patient+Structure)</option>
+                            <option value="les_deux">📄+📑 Les deux</option>
                         </select>
                     </div>
                     <div class="col-md-4">
                         <label class="form-label">&nbsp;</label>
                         <button class="btn btn-primary w-100" onclick="finaliserVente()" id="finaliserBtn" disabled>
-                            <i class="fas fa-receipt"></i> Finaliser la vente
+                            <i class="fas fa-receipt"></i> Finaliser
                         </button>
                     </div>
                 </div>
@@ -165,13 +199,210 @@
     </div>
 </div>
 
+<!-- Modal de progression -->
+<div class="modal fade" id="progressModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-body text-center p-4">
+                <div class="spinner-border text-primary mb-3" style="width: 3rem; height: 3rem;" role="status">
+                    <span class="visually-hidden">Chargement...</span>
+                </div>
+                <h5 id="progressTitle">Traitement en cours...</h5>
+                <p id="progressMessage" class="text-muted mb-0">Veuillez patienter</p>
+                <div class="progress mt-3" style="height: 5px;">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+/* Styles pour le panier */
+#panierTable th,
+#panierTable td {
+    vertical-align: middle !important;
+    padding: 12px 8px !important;
+}
+
+#panierTable .form-control-sm {
+    font-size: 0.875rem;
+    padding: 0.25rem 0.5rem;
+}
+
+#panierTable .input-group {
+    flex-wrap: nowrap;
+}
+
+#panierTable .btn-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+}
+
+/* Style pour les totaux */
+#panierTable tfoot td,
+#panierTable tfoot th {
+    font-size: 1rem;
+    padding: 10px 8px !important;
+}
+
+/* Responsive pour mobile */
+@media (max-width: 768px) {
+    #panierTable {
+        font-size: 0.8rem;
+    }
+    
+    #panierTable .form-control-sm {
+        width: 60px !important;
+        font-size: 0.75rem;
+    }
+    
+    #panierTable .btn-sm {
+        padding: 0.2rem 0.35rem;
+        min-width: 25px;
+    }
+}
+</style>
+
 <script>
 let panier = [];
 let patientId = null;
 let patientTaux = 0;
 let patientName = '';
+let produitsList = [];
+let patientAssurance = '';
 
-// ========== RECHERCHE DE PRODUITS ==========
+// Fonctions de progression
+function showProgress(title, message) {
+    document.getElementById('progressTitle').innerText = title || 'Traitement en cours...';
+    document.getElementById('progressMessage').innerHTML = message || 'Veuillez patienter';
+    const progressBar = document.querySelector('#progressModal .progress-bar');
+    if (progressBar) progressBar.style.width = '0%';
+    const modal = new bootstrap.Modal(document.getElementById('progressModal'));
+    modal.show();
+}
+
+function updateProgress(percent, message) {
+    const progressBar = document.querySelector('#progressModal .progress-bar');
+    if (progressBar) progressBar.style.width = percent + '%';
+    if (message) document.getElementById('progressMessage').innerHTML = message;
+}
+
+function hideProgress() {
+    const modal = bootstrap.Modal.getInstance(document.getElementById('progressModal'));
+    if (modal) modal.hide();
+}
+
+// ========== CHARGEMENT DES PRODUITS ==========
+function chargerProduits() {
+    showLoader();
+    
+    fetch('/api/produits')
+        .then(response => response.json())
+        .then(data => {
+            produitsList = data;
+            const select = document.getElementById('produitSelect');
+            select.innerHTML = '<option value="">-- Choisir un produit --</option>';
+            
+            if (data && data.length > 0) {
+                data.forEach(p => {
+                    const option = document.createElement('option');
+                    option.value = p.id;
+                    option.setAttribute('data-prix', p.prix_vente);
+                    option.setAttribute('data-nom', p.nom.replace(/'/g, "\\'"));
+                    option.setAttribute('data-stock', p.quantite_stock);
+                    option.text = `${p.nom} - ${parseInt(p.prix_vente).toLocaleString()} FCFA (Stock: ${p.quantite_stock})`;
+                    select.appendChild(option);
+                });
+            }
+            
+            hideLoader();
+            chargerStocks();
+            filterProduits();
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            hideLoader();
+            document.getElementById('produitSelect').innerHTML = '<option value="">-- Erreur de chargement --</option>';
+        });
+}
+
+// ========== SUIVI DES STOCKS ==========
+function chargerStocks() {
+    fetch('/api/produits')
+        .then(response => response.json())
+        .then(produits => {
+            const container = document.getElementById('stockAlertList');
+            container.innerHTML = '';
+            
+            if (!produits || produits.length === 0) {
+                container.innerHTML = '<div class="alert alert-warning text-center mb-0">⚠️ Aucun produit enregistré</div>';
+                return;
+            }
+            
+            const stockFaible = produits.filter(p => p.quantite_stock <= p.seuil_alerte);
+            
+            if (stockFaible.length === 0) {
+                container.innerHTML = '<div class="alert alert-success text-center mb-0">✅ Tous les stocks sont suffisants</div>';
+                return;
+            }
+            
+            let html = '<div class="row">';
+            stockFaible.forEach(p => {
+                const stockClass = p.quantite_stock <= 5 ? 'danger' : 'warning';
+                const urgence = p.quantite_stock <= 5 ? '<br><span class="fw-bold text-danger">⚠️ Commande urgente !</span>' : '';
+                html += `
+                    <div class="col-md-4 mb-2">
+                        <div class="alert alert-${stockClass} p-2 small mb-0">
+                            <strong><i class="fas fa-exclamation-triangle"></i> ${p.nom.replace(/'/g, "\\'")}</strong><br>
+                            📦 Stock: <strong>${p.quantite_stock}</strong> unités
+                            ${urgence}
+                            <div class="mt-2">
+                                <button class="btn btn-sm btn-outline-dark" onclick="reapprovisionner(${p.id}, '${p.nom.replace(/'/g, "\\'")}')">
+                                    <i class="fas fa-truck"></i> Réapprovisionner
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            container.innerHTML = html;
+        })
+        .catch(error => {
+            console.error('Erreur stocks:', error);
+            document.getElementById('stockAlertList').innerHTML = '<div class="alert alert-danger text-center mb-0">❌ Erreur de chargement des stocks</div>';
+        });
+}
+
+function reapprovisionner(id, nom) {
+    const quantite = prompt(`Quantité à ajouter pour ${nom} :`, "50");
+    if (quantite && !isNaN(quantite) && parseInt(quantite) > 0) {
+        showProgress('Approvisionnement', `Ajout de ${quantite} ${nom} au stock...`);
+        
+        fetch(`/api/produits/${id}/approvisionner`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({quantite: parseInt(quantite)})
+        })
+        .then(r => r.json())
+        .then(data => {
+            hideProgress();
+            if (data.success) {
+                alert(`✅ ${quantite} ${nom} ajouté(s) au stock`);
+                chargerProduits();
+            } else {
+                alert('Erreur: ' + (data.error || 'Erreur inconnue'));
+            }
+        })
+        .catch(error => {
+            hideProgress();
+            alert('Erreur: ' + error);
+        });
+    }
+}
+
+// ========== RECHERCHE ==========
 function filterProduits() {
     const searchTerm = document.getElementById('searchProduitInput').value.toLowerCase().trim();
     const select = document.getElementById('produitSelect');
@@ -179,17 +410,14 @@ function filterProduits() {
     let visibleCount = 0;
     
     for (let i = 1; i < options.length; i++) {
-        const option = options[i];
-        const text = option.text.toLowerCase();
-        
+        const text = options[i].text.toLowerCase();
         if (searchTerm === '' || text.includes(searchTerm)) {
-            option.style.display = '';
+            options[i].style.display = '';
             visibleCount++;
         } else {
-            option.style.display = 'none';
+            options[i].style.display = 'none';
         }
     }
-    
     document.getElementById('produitResultCount').innerText = visibleCount;
 }
 
@@ -199,16 +427,23 @@ function clearProduitSearch() {
 }
 
 // ========== GESTION PATIENT ==========
+// ========== GESTION PATIENT CORRIGÉE ==========
 function checkSelectedPatient() {
+    // Nettoie d'abord les anciennes données
+    patientId = null;
+    patientTaux = 0;
+    patientName = '';
+    patientAssurance = '';
+    
     patientId = sessionStorage.getItem('selectedPatientId');
     patientName = sessionStorage.getItem('selectedPatientName');
-    let assurance = sessionStorage.getItem('selectedPatientAssurance');
+    patientAssurance = sessionStorage.getItem('selectedPatientAssurance');
     let taux = sessionStorage.getItem('selectedPatientTaux');
     
     if (!patientId || patientId === 'null' || patientId === 'undefined') {
         patientId = localStorage.getItem('selectedPatientId');
         patientName = localStorage.getItem('selectedPatientName');
-        assurance = localStorage.getItem('selectedPatientAssurance');
+        patientAssurance = localStorage.getItem('selectedPatientAssurance');
         taux = localStorage.getItem('selectedPatientTaux');
     }
     
@@ -216,61 +451,47 @@ function checkSelectedPatient() {
         patientTaux = parseFloat(taux) || 0;
         document.getElementById('selectedPatientName').innerText = patientName || 'Patient';
         
-        // 🔥 GESTION DES ASSURANCES (y compris personnalisées)
         let assuranceText = 'Non assuré';
-        let assuranceClass = 'bg-secondary';
+        if (patientAssurance === 'amu_cnss') assuranceText = 'AMU-CNSS';
+        else if (patientAssurance === 'amu_inam') assuranceText = 'AMU-INAM';
+        else if (patientAssurance && patientAssurance !== 'non_assure') assuranceText = patientAssurance;
         
-        if (assurance === 'amu_cnss') {
-            assuranceText = 'AMU-CNSS';
-            assuranceClass = 'bg-success';
-        } else if (assurance === 'amu_inam') {
-            assuranceText = 'AMU-INAM';
-            assuranceClass = 'bg-primary';
-        } else if (assurance === 'autre') {
-            assuranceText = 'Autre assurance';
-            assuranceClass = 'bg-info';
-        } else if (assurance && assurance !== 'non_assure' && assurance !== 'null') {
-            // 🔥 C'est une assurance personnalisée (ex: "CNPS", "MUTUELLE", "ALLIANZ")
-            assuranceText = assurance;
-            assuranceClass = 'bg-info';
-        }
-        
-        const assuranceSpan = document.getElementById('selectedAssurance');
-        assuranceSpan.innerHTML = assuranceText;
-        assuranceSpan.className = `badge ${assuranceClass} px-3 py-2`;
-        
+        document.getElementById('selectedAssurance').innerHTML = assuranceText;
         document.getElementById('selectedTaux').innerHTML = patientTaux;
         document.getElementById('patientInfo').style.display = 'block';
         document.getElementById('noPatientAlert').style.display = 'none';
+        
+        console.log('Patient chargé:', { patientId, patientName, patientTaux });
     } else {
         document.getElementById('patientInfo').style.display = 'none';
         document.getElementById('noPatientAlert').style.display = 'block';
+        document.getElementById('finaliserBtn').disabled = true;
+        console.log('Aucun patient sélectionné');
     }
 }
+
 function changePatient() {
     window.location.href = "/patients";
 }
 
 // ========== GESTION PANIER ==========
 function ajouterProduit() {
-    let select = document.getElementById('produitSelect');
-    let selectedIndex = select.selectedIndex;
+    const select = document.getElementById('produitSelect');
+    const produitId = select.value;
+    const selectedOption = select.options[select.selectedIndex];
     
-    if (selectedIndex === 0 || !select.value) {
+    if (!produitId) {
         alert('Veuillez sélectionner un produit');
         return;
     }
     
-    let selectedOption = select.options[selectedIndex];
-    let produitId = select.value;
-    let produitNom = selectedOption.getAttribute('data-nom');
-    let produitPrix = parseFloat(selectedOption.getAttribute('data-prix'));
-    let produitStock = parseInt(selectedOption.getAttribute('data-stock'));
+    const produitNom = selectedOption.getAttribute('data-nom');
+    const produitPrix = parseFloat(selectedOption.getAttribute('data-prix'));
+    const produitStock = parseInt(selectedOption.getAttribute('data-stock'));
     let quantite = parseInt(document.getElementById('quantite').value);
     
-    if (isNaN(produitPrix) || !produitNom || isNaN(produitStock)) {
-        alert('Erreur: Données du produit invalides');
-        return;
+    if (isNaN(quantite) || quantite < 1) {
+        quantite = 1;
     }
     
     if (quantite > produitStock) {
@@ -278,19 +499,25 @@ function ajouterProduit() {
         return;
     }
     
-    let existant = panier.find(item => item.id == produitId);
-    if (existant) {
-        if (existant.quantite + quantite > produitStock) {
-            alert(`Stock insuffisant ! Stock disponible: ${produitStock}, déjà ${existant.quantite} dans le panier`);
+    // Vérifier si le produit existe déjà dans le panier
+    const indexExistant = panier.findIndex(item => item.id == produitId);
+    
+    if (indexExistant !== -1) {
+        // Produit existe déjà
+        const nouvelleQte = panier[indexExistant].quantite + quantite;
+        if (nouvelleQte > panier[indexExistant].stock_max) {
+            alert(`Stock maximum disponible pour ${produitNom}: ${panier[indexExistant].stock_max}`);
             return;
         }
-        existant.quantite += quantite;
-        existant.total = (existant.prix || produitPrix) * existant.quantite;
+        panier[indexExistant].quantite = nouvelleQte;
+        panier[indexExistant].total = (panier[indexExistant].prix_reel || panier[indexExistant].prix) * nouvelleQte;
     } else {
+        // Nouveau produit
         panier.push({
-            id: produitId,
+            id: parseInt(produitId),
             nom: produitNom,
             prix: produitPrix,
+            prix_reel: produitPrix,
             quantite: quantite,
             total: produitPrix * quantite,
             stock_max: produitStock
@@ -300,234 +527,327 @@ function ajouterProduit() {
     afficherPanier();
     select.selectedIndex = 0;
     document.getElementById('quantite').value = '1';
+    
+    // Feedback visuel
+    const btn = document.querySelector('.btn-success');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-check"></i> Ajouté !';
+    setTimeout(() => {
+        btn.innerHTML = originalText;
+    }, 1000);
 }
 
 function modifierPrix(index, nouveauPrix) {
-    let prix = parseFloat(nouveauPrix);
+    const prix = parseFloat(nouveauPrix);
     if (isNaN(prix) || prix <= 0) {
         alert('Veuillez entrer un prix valide');
         afficherPanier();
         return;
     }
-    panier[index].prix = prix;
-    panier[index].total = prix * panier[index].quantite;
-    afficherPanier();
+    if (index >= 0 && index < panier.length) {
+        panier[index].prix_reel = prix;
+        panier[index].total = prix * panier[index].quantite;
+        afficherPanier();
+    }
 }
 
-function modifierQuantiteDirect(index, nouvelleQuantite) {
+function modifierQuantite(index, nouvelleQuantite) {
     let qte = parseInt(nouvelleQuantite);
     if (isNaN(qte) || qte < 1) qte = 1;
-    if (qte > panier[index].stock_max) {
-        alert(`Stock maximum: ${panier[index].stock_max}`);
-        return;
+    if (index >= 0 && index < panier.length) {
+        if (qte > panier[index].stock_max) {
+            alert(`Stock maximum: ${panier[index].stock_max}`);
+            afficherPanier();
+            return;
+        }
+        panier[index].quantite = qte;
+        panier[index].total = (panier[index].prix_reel || panier[index].prix) * qte;
+        afficherPanier();
     }
-    panier[index].quantite = qte;
-    panier[index].total = panier[index].prix * qte;
-    afficherPanier();
 }
 
 function afficherPanier() {
-    let tbody = document.getElementById('panierBody');
+    const tbody = document.getElementById('panierBody');
     tbody.innerHTML = '';
     
     if (panier.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center">Aucun produit dans le panier</td</tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center">Aucun produit dans le panier</td></tr>';
         document.getElementById('finaliserBtn').disabled = true;
         document.getElementById('sousTotal').innerHTML = '0 FCFA';
         document.getElementById('priseEnCharge').innerHTML = '0 FCFA';
         document.getElementById('netAPayer').innerHTML = '0 FCFA';
+        updatePanierBadge();
         return;
     }
     
     let sousTotal = 0;
-    for (let index = 0; index < panier.length; index++) {
-        let item = panier[index];
-        sousTotal += item.total;
-        
-        let row = tbody.insertRow();
-        
-        let cellNom = row.insertCell(0);
-        cellNom.innerHTML = item.nom;
-        
-        let cellPrix = row.insertCell(1);
-        cellPrix.className = 'text-center';
-        cellPrix.innerHTML = '<input type="number" class="form-control form-control-sm" value="' + item.prix + '" style="width: 110px; text-align: center;" onchange="modifierPrix(' + index + ', this.value)">';
-        
-        let cellQuantite = row.insertCell(2);
-        cellQuantite.className = 'text-center';
-        cellQuantite.innerHTML = '<div class="input-group" style="width: 120px; margin: 0 auto;">' +
-            '<button class="btn btn-sm btn-secondary" onclick="modifQuantite(' + index + ', -1)">-</button>' +
-            '<input type="number" class="form-control form-control-sm text-center" value="' + item.quantite + '" style="width: 50px; text-align: center;" onchange="modifierQuantiteDirect(' + index + ', this.value)">' +
-            '<button class="btn btn-sm btn-secondary" onclick="modifQuantite(' + index + ', 1)">+</button>' +
-            '</div>';
-        
-        let cellTotal = row.insertCell(3);
-        cellTotal.className = 'text-end';
-        cellTotal.innerHTML = item.total.toLocaleString() + ' FCFA';
-        
-        let cellAction = row.insertCell(4);
-        cellAction.className = 'text-center';
-        cellAction.innerHTML = '<button class="btn btn-sm btn-danger" onclick="supprimerProduit(' + index + ')"><i class="fas fa-trash"></i></button>';
-    }
     
-    let priseEnCharge = (sousTotal * patientTaux) / 100;
-    let netAPayer = sousTotal - priseEnCharge;
+    panier.forEach((item, index) => {
+        const prixReel = item.prix_reel || item.prix;
+        const total = prixReel * item.quantite;
+        sousTotal += total;
+        
+        const row = tbody.insertRow();
+        
+        // Colonne 1: Produit
+        const cellNom = row.insertCell(0);
+        cellNom.innerHTML = `<strong>${item.nom}</strong>`;
+        cellNom.style.verticalAlign = 'middle';
+        
+        // Colonne 2: Prix unitaire
+        const cellPrix = row.insertCell(1);
+        cellPrix.className = 'text-center';
+        cellPrix.style.verticalAlign = 'middle';
+        cellPrix.innerHTML = `
+            <input type="number" class="form-control form-control-sm text-center" 
+                   value="${prixReel}" style="width: 100px; display: inline-block;"
+                   onchange="modifierPrix(${index}, this.value)">
+        `;
+        
+        // Colonne 3: Quantité
+        const cellQte = row.insertCell(2);
+        cellQte.className = 'text-center';
+        cellQte.style.verticalAlign = 'middle';
+        cellQte.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: center; gap: 5px;">
+                <button class="btn btn-sm btn-secondary" onclick="modifierQuantite(${index}, ${item.quantite - 1})" style="width: 30px;">-</button>
+                <input type="text" class="form-control text-center" value="${item.quantite}" 
+                       style="width: 60px; display: inline-block; text-align: center;"
+                       onchange="modifierQuantite(${index}, this.value)">
+                <button class="btn btn-sm btn-secondary" onclick="modifierQuantite(${index}, ${item.quantite + 1})" style="width: 30px;">+</button>
+            </div>
+        `;
+        
+        // Colonne 4: Total
+        const cellTotal = row.insertCell(3);
+        cellTotal.className = 'text-end fw-bold';
+        cellTotal.style.verticalAlign = 'middle';
+        cellTotal.innerHTML = `${total.toLocaleString()} FCFA`;
+        
+        // Colonne 5: Action
+        const cellAction = row.insertCell(4);
+        cellAction.className = 'text-center';
+        cellAction.style.verticalAlign = 'middle';
+        cellAction.innerHTML = `
+            <button class="btn btn-sm btn-danger" onclick="supprimerProduit(${index})" title="Supprimer">
+                <i class="fas fa-trash"></i>
+            </button>
+        `;
+    });
+    
+    const priseEnCharge = (sousTotal * patientTaux) / 100;
+    const netAPayer = sousTotal - priseEnCharge;
     
     document.getElementById('sousTotal').innerHTML = sousTotal.toLocaleString() + ' FCFA';
     document.getElementById('priseEnCharge').innerHTML = priseEnCharge.toLocaleString() + ' FCFA';
     document.getElementById('netAPayer').innerHTML = netAPayer.toLocaleString() + ' FCFA';
     document.getElementById('finaliserBtn').disabled = false;
-}
-
-function modifQuantite(index, delta) {
-    let newQuantite = panier[index].quantite + delta;
-    if (newQuantite < 1) return;
-    if (newQuantite > panier[index].stock_max) {
-        alert(`Stock maximum: ${panier[index].stock_max}`);
-        return;
-    }
-    panier[index].quantite = newQuantite;
-    panier[index].total = panier[index].prix * newQuantite;
-    afficherPanier();
+    updatePanierBadge();
 }
 
 function supprimerProduit(index) {
-    panier.splice(index, 1);
-    afficherPanier();
+    if (index >= 0 && index < panier.length) {
+        panier.splice(index, 1);
+        afficherPanier();
+    }
 }
 
-// ========== FORMATER LA DATE ==========
-function getCurrentDateTime() {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const hours = String(now.getHours()).padStart(2, '0');
-    const minutes = String(now.getMinutes()).padStart(2, '0');
-    const seconds = String(now.getSeconds()).padStart(2, '0');
-    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+function viderPanier() {
+    if (panier.length > 0 && confirm('Vider complètement le panier ?')) {
+        panier = [];
+        afficherPanier();
+    }
 }
 
-// ========== FORMATER LA DATE ==========
-function getCurrentDateTime() {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const hours = String(now.getHours()).padStart(2, '0');
-    const minutes = String(now.getMinutes()).padStart(2, '0');
-    const seconds = String(now.getSeconds()).padStart(2, '0');
-    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+function updatePanierBadge() {
+    const totalItems = panier.reduce((sum, item) => sum + item.quantite, 0);
+    const badge = document.getElementById('panierBadge');
+    if (badge) {
+        if (totalItems > 0) {
+            badge.style.display = 'inline-block';
+            badge.innerText = totalItems;
+        } else {
+            badge.style.display = 'none';
+        }
+    }
 }
 
-// ========== FINALISATION VENTE PHARMACIE ==========
+// ========== FINALISATION AVEC PROGRESSION ==========
+// ========== FINALISATION CORRIGÉE ==========
+// ========== FINALISATION CORRIGÉE AVEC LOGS ==========
 function finaliserVente() {
-    console.log('=== FINALISATION VENTE PHARMACIE ===');
-    console.log('Panier:', panier);
-    console.log('Patient ID:', patientId);
-    console.log('Patient Name:', patientName);
-    console.log('Patient Taux:', patientTaux);
+    console.log('=== DÉBUT FINALISATION VENTE ===');
+    console.log('Panier:', JSON.parse(JSON.stringify(panier)));
     
     if (panier.length === 0) {
         alert('Le panier est vide');
         return;
     }
     
-    if (!patientId || patientId === 'null' || patientId === 'undefined') {
-        alert('Veuillez sélectionner un patient');
+    // Récupérer le patient directement depuis sessionStorage
+    const currentPatientId = sessionStorage.getItem('selectedPatientId');
+    const currentPatientName = sessionStorage.getItem('selectedPatientName');
+    const currentPatientTaux = parseFloat(sessionStorage.getItem('selectedPatientTaux') || 0);
+    
+    console.log('Patient depuis sessionStorage:', {
+        id: currentPatientId,
+        nom: currentPatientName,
+        taux: currentPatientTaux
+    });
+    
+    if (!currentPatientId || currentPatientId === 'null' || currentPatientId === 'undefined') {
+        // Essayer localStorage
+        const localId = localStorage.getItem('selectedPatientId');
+        if (localId && localId !== 'null') {
+            currentPatientId = localId;
+            currentPatientName = localStorage.getItem('selectedPatientName');
+            currentPatientTaux = parseFloat(localStorage.getItem('selectedPatientTaux') || 0);
+            console.log('Patient depuis localStorage:', { id: currentPatientId, nom: currentPatientName });
+        } else {
+            alert('Veuillez sélectionner un patient');
+            return;
+        }
+    }
+    
+    // Calcul des totaux
+    let sousTotal = 0;
+    const produitsDetails = [];
+    
+    for (const item of panier) {
+        const prixReel = item.prix_reel || item.prix;
+        const total = prixReel * item.quantite;
+        sousTotal += total;
+        
+        produitsDetails.push({
+            id: item.id,
+            nom: item.nom,
+            prix_reel: prixReel,
+            quantite: item.quantite,
+            total: total
+        });
+    }
+    
+    const priseEnCharge = (sousTotal * currentPatientTaux) / 100;
+    const netAPayer = sousTotal - priseEnCharge;
+    const ordonnance = document.getElementById('avecOrdonnance').checked;
+    const typeDocument = document.getElementById('typeDocument').value;
+    const modePaiement = document.getElementById('modePaiement').value;
+    
+    console.log('Calculs:', {
+        sousTotal,
+        priseEnCharge,
+        netAPayer,
+        taux: currentPatientTaux
+    });
+    
+    // Confirmation détaillée
+    let confirmationMsg = `📊 RÉCAPITULATIF DE LA VENTE\n\n`;
+    confirmationMsg += `👤 Patient: ${currentPatientName}\n`;
+    confirmationMsg += `🆔 ID Patient: ${currentPatientId}\n`;
+    confirmationMsg += `🏥 Taux assurance: ${currentPatientTaux}%\n`;
+    confirmationMsg += `\n📦 PRODUITS:\n`;
+    
+    produitsDetails.forEach((item, idx) => {
+        confirmationMsg += `${idx + 1}. ${item.nom}\n`;
+        confirmationMsg += `   Quantité: ${item.quantite} x ${item.prix_reel.toLocaleString()} FCFA = ${item.total.toLocaleString()} FCFA\n`;
+    });
+    
+    confirmationMsg += `\n💰 Sous-total: ${sousTotal.toLocaleString()} FCFA\n`;
+    confirmationMsg += `🎯 Prise en charge (${currentPatientTaux}%): ${priseEnCharge.toLocaleString()} FCFA\n`;
+    confirmationMsg += `💵 À payer: ${netAPayer.toLocaleString()} FCFA\n\n`;
+    confirmationMsg += `💳 Paiement: ${modePaiement}\n`;
+    confirmationMsg += `📄 Document: ${typeDocument}\n\n`;
+    confirmationMsg += `✅ Confirmer la vente ?`;
+    
+    if (!confirm(confirmationMsg)) {
+        console.log('Vente annulée par l\'utilisateur');
         return;
     }
     
-    // ⚡ DÉSACTIVER LE BOUTON ET AFFICHER CHARGEMENT
-    const btn = document.getElementById('finaliserBtn');
-    const originalText = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Traitement en cours...';
-    
-    // Calcul des montants
-    let sousTotal = panier.reduce((sum, item) => sum + item.total, 0);
-    let priseEnCharge = (sousTotal * patientTaux) / 100;
-    let netAPayer = sousTotal - priseEnCharge;
-    let ordonnance = document.getElementById('avecOrdonnance').checked;
-    
-    // Formater les produits
-    let produitsData = panier.map(item => ({
-        id: parseInt(item.id),
-        nom: item.nom,
-        prix: parseFloat(item.prix),
-        quantite: parseInt(item.quantite),
-        total: parseFloat(item.total)
-    }));
-    
     // Construction de l'objet vente
-    let vente = {
-        patient_id: parseInt(patientId),
-        patient_nom: patientName,
-        produits: produitsData,
-        sous_total: parseFloat(sousTotal),
-        prise_en_charge: parseFloat(priseEnCharge),
-        net_a_payer: parseFloat(netAPayer),
-        mode_paiement: document.getElementById('modePaiement').value,
+    const venteData = {
+        patient_id: parseInt(currentPatientId),
+        patient_nom: currentPatientName,
+        produits: produitsDetails,
+        sous_total: sousTotal,
+        prise_en_charge: priseEnCharge,
+        net_a_payer: netAPayer,
+        mode_paiement: modePaiement,
         avec_ordonnance: ordonnance,
-        taux_assurance: parseFloat(patientTaux)
+        taux_assurance: currentPatientTaux
     };
     
-    console.log('Objet vente envoyé:', vente);
+    console.log('DONNÉES ENVOYÉES AU SERVEUR:', JSON.stringify(venteData, null, 2));
     
-    let typeDocument = document.getElementById('typeDocument').value;
+    // Afficher la modale de progression
+    showProgress('Finalisation de la vente', 'Préparation de la vente...');
+    updateProgress(10, 'Vérification des stocks...');
+    
+    let progress = 10;
+    const progressInterval = setInterval(() => {
+        if (progress < 90) {
+            progress += 10;
+            updateProgress(progress, `Traitement en cours... ${progress}%`);
+        }
+    }, 300);
     
     fetch('/api/ventes/pharma', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(vente)
+        body: JSON.stringify(venteData)
     })
-    .then(response => response.json())
+    .then(r => r.json())
     .then(data => {
-        console.log('Réponse API:', data);
-        if(data.success) {
-            if (typeDocument === 'recu_client') {
-                window.location.href = `/recu/${data.vente_id}/pharma`;
-            } else if (typeDocument === 'recu_structure') {
-                window.location.href = `/recu_structure/${data.vente_id}/pharma`;
-            } else if (typeDocument === 'facture_client') {
-                window.location.href = `/facture/${data.vente_id}/pharma`;
-            } else if (typeDocument === 'facture_structure') {
-                window.location.href = `/facture_structure/${data.vente_id}/pharma`;
-            } else if (typeDocument === 'les_deux') {
-                window.open(`/recu/${data.vente_id}/pharma`, '_blank');
-                window.open(`/recu_structure/${data.vente_id}/pharma`, '_blank');
-                window.location.href = "/dashboard";
-            } else {
-                window.location.href = "/dashboard";
-            }
+        clearInterval(progressInterval);
+        console.log('Réponse serveur:', data);
+        
+        if (data.success) {
+            updateProgress(100, 'Vente enregistrée !');
+            
+            setTimeout(() => {
+                hideProgress();
+                
+                // Sauvegarder l'ID de vente pour les reçus
+                sessionStorage.setItem('lastVenteId', data.vente_id);
+                sessionStorage.setItem('lastVenteData', JSON.stringify(venteData));
+                
+                // Vider le panier
+                panier = [];
+                afficherPanier();
+                
+                // Redirection selon le type de document
+                if (typeDocument === 'recu_client') {
+                    window.location.href = `/recu/${data.vente_id}/pharma`;
+                } else if (typeDocument === 'recu_structure') {
+                    window.location.href = `/recu_structure/${data.vente_id}/pharma`;
+                } else if (typeDocument === 'facture_client') {
+                    window.location.href = `/facture/${data.vente_id}/pharma`;
+                } else if (typeDocument === 'facture_structure') {
+                    window.location.href = `/facture_structure/${data.vente_id}/pharma`;
+                } else if (typeDocument === 'les_deux') {
+                    window.open(`/recu/${data.vente_id}/pharma`, '_blank');
+                    window.open(`/recu_structure/${data.vente_id}/pharma`, '_blank');
+                    window.location.href = "/dashboard";
+                } else {
+                    window.location.href = "/dashboard";
+                }
+            }, 500);
         } else {
+            hideProgress();
             alert('Erreur: ' + (data.error || 'Erreur inconnue'));
-            btn.disabled = false;
-            btn.innerHTML = originalText;
         }
     })
     .catch(error => {
+        clearInterval(progressInterval);
+        hideProgress();
         console.error('Erreur fetch:', error);
-        alert('Erreur lors de la vente: ' + error);
-        btn.disabled = false;
-        btn.innerHTML = originalText;
+        alert('Erreur: ' + error);
     });
 }
-function chargerProduits() {
-    showLoader();
-    
-    fetch('/api/produits')
-        .then(response => response.json())
-        .then(data => {
-            // Afficher les produits
-            hideLoader();
-        })
-        .catch(() => hideLoader());
-}
 // ========== INITIALISATION ==========
-window.onload = function() {
+document.addEventListener('DOMContentLoaded', function() {
     checkSelectedPatient();
-    filterProduits();
-};
+    chargerProduits();
+});
 </script>
 {% endblock %}
