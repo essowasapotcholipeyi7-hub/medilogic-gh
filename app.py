@@ -177,7 +177,23 @@ def index():
             title = worksheet.title
             if title.endswith('_users'):
                 print(f"Verification dans: {title}")
-                records = worksheet.get_all_records()
+                
+                # 🔥 Verifier si la feuille n'est pas vide
+                try:
+                    # Verifier le nombre de lignes
+                    row_count = len(worksheet.get_all_values())
+                    if row_count <= 1:  # Seulement l'en-tete ou vide
+                        print(f"   Feuille vide ou sans donnees, ignoree")
+                        continue
+                    
+                    records = worksheet.get_all_records()
+                    if not records:
+                        print(f"   Aucun enregistrement, ignoree")
+                        continue
+                        
+                except Exception as e:
+                    print(f"   Erreur lecture feuille: {e}")
+                    continue
                 
                 for row in records:
                     if str(row.get('email')) == email:
@@ -185,10 +201,13 @@ def index():
                         if row.get('mot_de_passe') == hash_password(password):
                             print("Mot de passe OK")
                             # Extraire structure_id du nom de la feuille
-                            structure_id = int(title.split('_')[1])
+                            try:
+                                structure_id = int(title.split('_')[1])
+                            except:
+                                structure_id = 1
                             
                             structures = sheets_helper.get_all_records('structures', use_prefix=False)
-                            structure = next((s for s in structures if s.get('ID') == structure_id), {})
+                            structure = next((s for s in structures if str(s.get('ID')) == str(structure_id)), {})
                             
                             if structure.get('statut') == 'active':
                                 session['user_id'] = row.get('ID')
@@ -232,6 +251,7 @@ def index():
         return redirect(url_for('index'))
     
     return render_template('index.html')
+
 # MODIFIER la route d'inscription
 
 def valider_mot_de_passe(password):
