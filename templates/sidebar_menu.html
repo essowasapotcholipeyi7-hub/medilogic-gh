@@ -44,9 +44,18 @@
         <a class="nav-link" href="{{ url_for('rappels_rendez_vous') }}">
             <i class="fas fa-bell"></i> Rappels
         </a>
+        <a class="nav-link" href="{{ url_for('historique_annulations') }}">
+            <i class="fas fa-ban"></i> Annulations
+        </a>
+        <a class="nav-link" href="{{ url_for('statistiques_ventes') }}">
+            <i class="fas fa-chart-bar"></i> Statistiques ventes
+        </a>
         
         <!-- Administration (admin uniquement) -->
         {% if session.is_admin %}
+        <a class="nav-link" href="{{ url_for('admin_finances') }}">
+            <i class="fas fa-coins"></i> Finances
+        </a>
         <a class="nav-link" href="{{ url_for('admin_structure') }}">
             <i class="fas fa-cog"></i> Administration
         </a>

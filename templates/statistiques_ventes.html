@@ -1,0 +1,338 @@
+{% extends "base.html" %}
+
+{% block title %}Statistiques des ventes{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stats-card {
+        border-radius: 20px;
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+    .stats-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 15px 35px rgba(0,0,0,0.1);
+    }
+    .filter-bar {
+        background: #f8f9fa;
+        border-radius: 15px;
+        padding: 15px;
+        margin-bottom: 20px;
+    }
+    .badge-annulee {
+        background-color: #dc3545;
+        color: white;
+    }
+    .badge-validee {
+        background-color: #28a745;
+        color: white;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-3 mb-4">
+        {% include 'sidebar_menu.html' %}
+    </div>
+
+    <div class="col-md-9">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5><i class="fas fa-chart-bar"></i> Statistiques des ventes</h5>
+            </div>
+            <div class="card-body">
+
+                <!-- Cartes recap -->
+                <div class="row g-3 mb-4">
+                    <div class="col-md-3">
+                        <div class="card stats-card border-0 shadow-sm bg-success bg-opacity-10">
+                            <div class="card-body text-center">
+                                <h3 class="text-success" id="totalVentes">0</h3>
+                                <small class="text-muted">Total ventes</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card stats-card border-0 shadow-sm bg-info bg-opacity-10">
+                            <div class="card-body text-center">
+                                <h3 class="text-info" id="totalCA">0 FCFA</h3>
+                                <small class="text-muted">Chiffre d'affaires</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card stats-card border-0 shadow-sm bg-warning bg-opacity-10">
+                            <div class="card-body text-center">
+                                <h3 class="text-warning" id="totalActes">0</h3>
+                                <small class="text-muted">Actes vendus</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card stats-card border-0 shadow-sm bg-danger bg-opacity-10">
+                            <div class="card-body text-center">
+                                <h3 class="text-danger" id="totalPharma">0</h3>
+                                <small class="text-muted">Produits vendus</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Filtres -->
+                <div class="filter-bar">
+                    <div class="row g-2">
+                        <div class="col-md-3">
+                            <label class="form-label small">Date debut</label>
+                            <input type="date" id="filtreDateDebut" class="form-control form-control-sm">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small">Date fin</label>
+                            <input type="date" id="filtreDateFin" class="form-control form-control-sm">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small">Heure debut</label>
+                            <input type="time" id="filtreHeureDebut" class="form-control form-control-sm">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small">Heure fin</label>
+                            <input type="time" id="filtreHeureFin" class="form-control form-control-sm">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small">&nbsp;</label>
+                            <button class="btn btn-primary btn-sm w-100" onclick="appliquerFiltres()">
+                                <i class="fas fa-search"></i> Filtrer
+                            </button>
+                        </div>
+                    </div>
+                    <div class="row mt-2 g-2">
+                        <div class="col-md-3">
+                            <label class="form-label small">Patient</label>
+                            <input type="text" id="filtrePatient" class="form-control form-control-sm" 
+                                   placeholder="Nom du patient" onkeyup="appliquerFiltres()">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small">Vendeur</label>
+                            <input type="text" id="filtreVendeur" class="form-control form-control-sm" 
+                                   placeholder="Nom du vendeur" onkeyup="appliquerFiltres()">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small">Type</label>
+                            <select id="filtreType" class="form-control form-control-sm" onchange="appliquerFiltres()">
+                                <option value="tous">Tous</option>
+                                <option value="actes">Actes medicaux</option>
+                                <option value="pharmacie">Pharmacie</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small">Statut</label>
+                            <select id="filtreStatut" class="form-control form-control-sm" onchange="appliquerFiltres()">
+                                <option value="tous">Tous</option>
+                                <option value="validee">Validees</option>
+                                <option value="annulee">Annulees</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row mt-2">
+                        <div class="col-md-12">
+                            <button class="btn btn-secondary btn-sm" onclick="resetFiltres()">
+                                <i class="fas fa-sync-alt"></i> Reinitialiser
+                            </button>
+                            <button class="btn btn-success btn-sm ms-2" onclick="exporterCSV()">
+                                <i class="fas fa-file-excel"></i> Exporter CSV
+                            </button>
+                            <span class="ms-3 text-muted">
+                                <span id="ventesResultCount">0</span> vente(s) trouvee(s)
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tableau des ventes -->
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm" id="ventesStatsTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th>ID</th>
+                                <th>Date</th>
+                                <th>Heure</th>
+                                <th>Patient</th>
+                                <th>Type</th>
+                                <th>Detail</th>
+                                <th>Montant</th>
+                                <th>Vendeur</th>
+                                <th>Statut</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ventesStatsList">
+                            <tr><td colspan="9" class="text-center">Chargement...</td</tr
+                        </tbody>
+                        <tfoot class="table-light">
+                            <tr class="fw-bold">
+                                <td colspan="6" class="text-end">Total :</td
+                                <td id="totalMontantFooter">0 FCFA</td
+                                <td colspan="2"></td
+                            </tr
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let toutesLesVentes = [];
+
+function chargerVentes() {
+    showLoader('Chargement des ventes...');
+    
+    fetch('/api/ventes/all')
+        .then(response => response.json())
+        .then(ventes => {
+            toutesLesVentes = ventes;
+            appliquerFiltres();
+            hideLoader();
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            document.getElementById('ventesStatsList').innerHTML = '<tr><td colspan="9" class="text-center text-danger">Erreur de chargement</td</tr';
+            hideLoader();
+        });
+}
+
+function appliquerFiltres() {
+    const dateDebut = document.getElementById('filtreDateDebut').value;
+    const dateFin = document.getElementById('filtreDateFin').value;
+    const heureDebut = document.getElementById('filtreHeureDebut').value;
+    const heureFin = document.getElementById('filtreHeureFin').value;
+    const filtrePatient = document.getElementById('filtrePatient').value.toLowerCase().trim();
+    const filtreVendeur = document.getElementById('filtreVendeur').value.toLowerCase().trim();
+    const filtreType = document.getElementById('filtreType').value;
+    const filtreStatut = document.getElementById('filtreStatut').value;
+    
+    const tbody = document.getElementById('ventesStatsList');
+    tbody.innerHTML = '';
+    
+    let visibleCount = 0;
+    let totalMontant = 0;
+    let totalActes = 0;
+    let totalPharma = 0;
+    
+    toutesLesVentes.forEach(vente => {
+        let visible = true;
+        const dateVente = vente.date ? vente.date.split(' ')[0] : '';
+        const heureVente = vente.date ? vente.date.split(' ')[1]?.substring(0, 5) : '';
+        const patient = (vente.patient_nom || '').toLowerCase();
+        const vendeur = (vente.vendeur || '').toLowerCase();
+        const type = vente.type;
+        const montant = vente.net_a_payer || 0;
+        const statut = vente.statut || 'validee';
+        
+        // Filtre date
+        if (dateDebut && dateFin && dateVente) {
+            if (dateVente < dateDebut || dateVente > dateFin) visible = false;
+        }
+        
+        // Filtre heure
+        if (visible && heureDebut && heureFin && heureVente) {
+            if (heureVente < heureDebut || heureVente > heureFin) visible = false;
+        }
+        
+        // Filtre patient
+        if (visible && filtrePatient && !patient.includes(filtrePatient)) visible = false;
+        
+        // Filtre vendeur
+        if (visible && filtreVendeur && !vendeur.includes(filtreVendeur)) visible = false;
+        
+        // Filtre type
+        if (visible && filtreType !== 'tous' && type !== filtreType) visible = false;
+        
+        // Filtre statut
+        if (visible && filtreStatut !== 'tous' && statut !== filtreStatut) visible = false;
+        
+        if (visible) {
+            visibleCount++;
+            totalMontant += montant;
+            if (type === 'actes') totalActes++;
+            else if (type === 'pharmacie' || type === 'pharma') totalPharma++;
+            
+            const row = tbody.insertRow();
+            const dateObj = new Date(vente.date);
+            const dateStr = dateObj.toLocaleDateString('fr-FR');
+            const heureStr = dateObj.toLocaleTimeString('fr-FR', {hour: '2-digit', minute:'2-digit'});
+            
+            row.insertCell(0).innerHTML = vente.ID;
+            row.insertCell(1).innerHTML = dateStr;
+            row.insertCell(2).innerHTML = heureStr;
+            row.insertCell(3).innerHTML = vente.patient_nom || '-';
+            
+            const typeCell = row.insertCell(4);
+            if (type === 'actes') {
+                typeCell.innerHTML = '<span class="badge bg-primary">Acte</span>';
+            } else {
+                typeCell.innerHTML = '<span class="badge bg-success">Pharmacie</span>';
+            }
+            
+            row.insertCell(5).innerHTML = vente.detail || '-';
+            row.insertCell(6).innerHTML = Math.round(montant).toLocaleString() + ' FCFA';
+            row.insertCell(7).innerHTML = vente.vendeur || '-';
+            
+            const statutCell = row.insertCell(8);
+            if (statut === 'annulee') {
+                statutCell.innerHTML = '<span class="badge bg-danger">Annulee</span>';
+            } else {
+                statutCell.innerHTML = '<span class="badge bg-success">Validee</span>';
+            }
+        }
+    });
+    
+    // Mettre a jour les cartes
+    document.getElementById('totalVentes').innerHTML = visibleCount;
+    document.getElementById('totalCA').innerHTML = Math.round(totalMontant).toLocaleString() + ' FCFA';
+    document.getElementById('totalActes').innerHTML = totalActes;
+    document.getElementById('totalPharma').innerHTML = totalPharma;
+    document.getElementById('ventesResultCount').innerHTML = visibleCount;
+    document.getElementById('totalMontantFooter').innerHTML = Math.round(totalMontant).toLocaleString() + ' FCFA';
+}
+
+function resetFiltres() {
+    document.getElementById('filtreDateDebut').value = '';
+    document.getElementById('filtreDateFin').value = '';
+    document.getElementById('filtreHeureDebut').value = '';
+    document.getElementById('filtreHeureFin').value = '';
+    document.getElementById('filtrePatient').value = '';
+    document.getElementById('filtreVendeur').value = '';
+    document.getElementById('filtreType').value = 'tous';
+    document.getElementById('filtreStatut').value = 'tous';
+    appliquerFiltres();
+}
+
+function exporterCSV() {
+    const rows = document.querySelectorAll('#ventesStatsList tr');
+    let csvContent = "ID;Date;Heure;Patient;Type;Detail;Montant;Vendeur;Statut\n";
+    
+    rows.forEach(row => {
+        const cells = row.cells;
+        if (cells.length > 1) {
+            csvContent += `${cells[0].innerText};${cells[1].innerText};${cells[2].innerText};${cells[3].innerText};${cells[4].innerText};${cells[5].innerText};${cells[6].innerText};${cells[7].innerText};${cells[8].innerText}\n`;
+        }
+    });
+    
+    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.href = url;
+    link.setAttribute('download', 'statistiques_ventes.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
+
+// Initialisation
+document.addEventListener('DOMContentLoaded', function() {
+    chargerVentes();
+});
+</script>
+{% endblock %}

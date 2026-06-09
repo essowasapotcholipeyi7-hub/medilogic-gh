@@ -164,29 +164,51 @@ def index():
         email = request.form.get('email')
         password = request.form.get('password')
         
-        # 🔥 Chercher d'abord dans les utilisateurs (users)
-        users = sheets_helper.get_all_records('users')
-        for user in users:
-            if user.get('email') == email:
-                if user.get('mot_de_passe') == hash_password(password):
-                    # Récupérer la structure du user
-                    structure_id = user.get('structure_id')
-                    structures = sheets_helper.get_all_records('structures', use_prefix=False)
-                    structure = next((s for s in structures if s.get('ID') == structure_id), {})
-                    
-                    if structure.get('statut') == 'active':
-                        session['user_id'] = user.get('ID')
-                        session['user_name'] = user.get('nom')
-                        session['structure_id'] = structure_id
-                        session['structure_nom'] = structure.get('nom')
-                        session['is_admin'] = (user.get('role') == 'admin')  # 🔥 True ou False
-                        flash(f'Bienvenue {user.get("nom")}', 'success')
-                        return redirect(url_for('dashboard'))
-                    else:
-                        flash('Structure non activée', 'warning')
-                        return redirect(url_for('index'))
+        print("=" * 50)
+        print(f"TENTATIVE DE CONNEXION")
+        print(f"Email: {email}")
+        print("=" * 50)
         
-        # Si pas dans users, chercher dans structures (admin global)
+        # 🔥 Chercher dans TOUTES les feuilles struct_X_users
+        spreadsheet = sheets_helper.spreadsheet
+        all_worksheets = spreadsheet.worksheets()
+        
+        for worksheet in all_worksheets:
+            title = worksheet.title
+            if title.endswith('_users'):
+                print(f"Verification dans: {title}")
+                records = worksheet.get_all_records()
+                
+                for row in records:
+                    if str(row.get('email')) == email:
+                        print(f"Utilisateur trouve dans {title}")
+                        if row.get('mot_de_passe') == hash_password(password):
+                            print("Mot de passe OK")
+                            # Extraire structure_id du nom de la feuille
+                            structure_id = int(title.split('_')[1])
+                            
+                            structures = sheets_helper.get_all_records('structures', use_prefix=False)
+                            structure = next((s for s in structures if s.get('ID') == structure_id), {})
+                            
+                            if structure.get('statut') == 'active':
+                                session['user_id'] = row.get('ID')
+                                session['user_name'] = row.get('nom')
+                                session['structure_id'] = structure_id
+                                session['structure_nom'] = structure.get('nom')
+                                session['is_admin'] = (row.get('role') == 'admin')
+                                print(f"✅ Connexion reussie")
+                                flash(f'Bienvenue {row.get("nom")}', 'success')
+                                return redirect(url_for('dashboard'))
+                            else:
+                                print("❌ Structure non active")
+                                flash('Structure non activee', 'warning')
+                                return redirect(url_for('index'))
+                        else:
+                            print("❌ Mot de passe incorrect")
+                            flash('Mot de passe incorrect', 'danger')
+                            return redirect(url_for('index'))
+        
+        # Verifier aussi dans structures (admin global)
         structures = sheets_helper.get_all_records('structures', use_prefix=False)
         for structure in structures:
             if structure.get('email') == email:
@@ -196,7 +218,7 @@ def index():
                         session['user_name'] = structure.get('nom')
                         session['structure_id'] = structure.get('ID')
                         session['structure_nom'] = structure.get('nom')
-                        session['is_admin'] = True  # Le propriétaire est admin
+                        session['is_admin'] = True
                         flash(f'Bienvenue {structure.get("nom")}', 'success')
                         return redirect(url_for('dashboard'))
                     else:
@@ -206,11 +228,10 @@ def index():
                     flash('Mot de passe incorrect', 'danger')
                     return redirect(url_for('index'))
         
-        flash('Email non trouvé', 'danger')
+        flash('Email non trouve', 'danger')
         return redirect(url_for('index'))
     
     return render_template('index.html')
-
 # MODIFIER la route d'inscription
 
 def valider_mot_de_passe(password):
@@ -2748,8 +2769,6 @@ def api_admin_delete_produit(produit_id):
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-# ========== ROUTES API POUR LA PHARMACIE ==========
-
 # ========== ROUTES API POUR LA PHARMACIE (SANS HISTORIQUE) ==========
 
 @app.route('/api/produits/<int:id>/approvisionner', methods=['POST'])
@@ -2844,104 +2863,97 @@ def api_modifier_stock(id):
 @app.route('/api/ventes/pharma', methods=['POST'])
 @login_required
 def api_vente_pharma():
-    """Enregistrer une vente de produits pharmaceutiques"""
+    import json
+    from datetime import datetime
+    
     try:
         data = request.json
         structure_id = session.get('structure_id')
-        user_id = session.get('user_id')
+        user_name = session.get('user_name', 'System')
         
         print("=" * 60)
-        print("🔄 NOUVELLE VENTE PHARMACIE")
-        print(f"   Données reçues: {json.dumps(data, indent=2, default=str)}")
+        print("VENTE PHARMACIE")
+        print(f"Patient: {data.get('patient_nom')}")
+        print(f"Vendeur: {user_name}")
         print("=" * 60)
         
         if not structure_id:
-            return jsonify({'success': False, 'error': 'Structure non trouvée'}), 400
+            return jsonify({'success': False, 'error': 'Structure non trouvee'}), 400
         
-        # Vérifier les données du patient
         patient_id = data.get('patient_id')
-        patient_nom = data.get('patient_nom')
-        
         if not patient_id:
-            print("❌ Erreur: patient_id manquant")
             return jsonify({'success': False, 'error': 'ID patient manquant'}), 400
         
-        # Vérifier que le patient existe
-        patient_check = db.execute_query("""
-            SELECT id, nom, prenom FROM patients 
-            WHERE id = %s AND structure_id = %s
-        """, (patient_id, structure_id))
-        
-        if not patient_check or len(patient_check) == 0:
-            print(f"❌ Patient {patient_id} non trouvé dans la structure {structure_id}")
-            return jsonify({'success': False, 'error': 'Patient non trouvé'}), 404
-        
-        from datetime import datetime
-        
-        # Insérer la vente
+        # Correction de la requête INSERT
         result = db.execute_query("""
             INSERT INTO ventes (
-                patient_id, structure_id, user_id, type, sous_total, 
-                prise_en_charge, net_a_payer, mode_paiement, 
-                avec_ordonnance, taux_assurance, date_vente
+                patient_id, 
+                patient_nom, 
+                structure_id, 
+                type, 
+                sous_total, 
+                prise_en_charge, 
+                net_a_payer, 
+                mode_paiement, 
+                taux_assurance, 
+                date_vente, 
+                produits,
+                created_by_nom
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s)
             RETURNING id
         """, (
-            patient_id, structure_id, user_id, 'pharmacie',
-            float(data.get('sous_total', 0)), 
+            patient_id,
+            data.get('patient_nom', 'Patient'),
+            structure_id,
+            'pharmacie',
+            float(data.get('sous_total', 0)),
             float(data.get('prise_en_charge', 0)),
-            float(data.get('net_a_payer', 0)), 
+            float(data.get('net_a_payer', 0)),
             data.get('mode_paiement', 'especes'),
-            data.get('avec_ordonnance', False), 
             float(data.get('taux_assurance', 0)),
-            datetime.now()
+            json.dumps(data.get('produits', []), ensure_ascii=False),
+            user_name
         ))
         
-        if not result or len(result) == 0:
-            return jsonify({'success': False, 'error': 'Erreur insertion vente'}), 500
-        
-        vente_id = result[0]['id'] if isinstance(result[0], dict) else result[0][0]
-        print(f"✅ Vente créée avec ID: {vente_id}")
-        
-        # Enregistrer les produits
-        produits = data.get('produits', [])
-        print(f"📦 Produits à enregistrer ({len(produits)}):")
-        
-        for produit in produits:
-            produit_id = produit.get('id')
-            produit_nom = produit.get('nom')
-            prix_reel = float(produit.get('prix_reel', 0))
-            quantite = int(produit.get('quantite', 0))
-            total = float(produit.get('total', 0))
+        if result and len(result) > 0:
+            vente_id = result[0]['id']
+            print(f"Vente pharmacie inseree ID: {vente_id} par {user_name}")
             
-            print(f"   - {produit_nom} (ID:{produit_id}): {quantite} x {prix_reel} = {total}")
+            # Mettre a jour les stocks
+            for produit in data.get('produits', []):
+                db.execute_query("""
+                    UPDATE produits 
+                    SET quantite_stock = quantite_stock - %s
+                    WHERE id = %s AND structure_id = %s
+                """, (int(produit.get('quantite', 0)), produit.get('id'), structure_id))
             
-            # Détail de vente
-            db.execute_query("""
-                INSERT INTO details_ventes (
-                    vente_id, produit_id, nom_produit, prix_unitaire, 
-                    quantite, total, structure_id
-                )
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """, (vente_id, produit_id, produit_nom, prix_reel, quantite, total, structure_id))
+            # AJOUT AUTOMATIQUE DE LA RECETTE
+            net_a_payer = float(data.get('net_a_payer', 0))
+            if net_a_payer > 0:
+                db.execute_query("""
+                    INSERT INTO recettes (structure_id, montant, source, source_id, source_type, description, created_by_nom)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    structure_id,
+                    net_a_payer,
+                    'patients',
+                    vente_id,
+                    'vente_pharma',
+                    'Vente pharmacie #' + str(vente_id) + ' - ' + data.get('patient_nom', 'Patient'),
+                    user_name
+                ))
+                print(f"Recette ajoutee: {net_a_payer} FCFA")
             
-            # Mise à jour du stock
-            db.execute_query("""
-                UPDATE produits 
-                SET quantite_stock = quantite_stock - %s
-                WHERE id = %s AND structure_id = %s
-            """, (quantite, produit_id, structure_id))
-        
-        print(f"🎉 Vente {vente_id} finalisée avec succès!")
-        return jsonify({'success': True, 'vente_id': vente_id})
-        
+            return jsonify({'success': True, 'vente_id': vente_id})
+        else:
+            return jsonify({'success': False, 'error': 'Erreur insertion'}), 500
+            
     except Exception as e:
-        print(f"❌ Erreur vente pharma: {e}")
+        print(f"ERREUR: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
-
 @app.route('/api/produits/<int:id>/stock', methods=['GET'])
 @login_required
 def api_get_stock_produit(id):
@@ -2994,11 +3006,12 @@ def api_ventes_stats():
         # Date du jour
         today = datetime.now().strftime('%Y-%m-%d')
         
-        # Récupérer toutes les ventes
+        # 🔥 Récupérer UNIQUEMENT les ventes valides (non annulées)
         ventes = db.execute_query("""
             SELECT type, net_a_payer, sous_total, date_vente
             FROM ventes 
-            WHERE structure_id = %s
+            WHERE structure_id = %s 
+            AND (statut = 'validee' OR statut IS NULL)
         """, (structure_id,))
         
         actes_today = 0
@@ -3021,16 +3034,14 @@ def api_ventes_stats():
                         else:
                             pharma_today += 1
                         
-                        # NET = ce que le patient a payé
                         ca_net_today += float(v.get('net_a_payer', 0))
-                        # BRUT = total avant assurance (sous_total)
                         ca_brut_today += float(v.get('sous_total', 0))
         
         return jsonify({
             'actes_today': actes_today,
             'pharma_today': pharma_today,
-            'ca_net_today': ca_net_today,      # Patient payé
-            'ca_brut_today': ca_brut_today     # Total général
+            'ca_net_today': ca_net_today,
+            'ca_brut_today': ca_brut_today
         })
         
     except Exception as e:
@@ -3044,14 +3055,15 @@ def api_ventes_stats():
             'ca_brut_today': 0
         }), 500
 
+
 @app.route('/api/activites/recentes')
 @login_required
 def api_activites_recentes():
-    """Retourne les 10 dernières activités"""
+    """Retourne les 10 dernières activités (hors annulées)"""
     try:
         structure_id = session.get('structure_id')
         
-        # 🔥 Récupérer avec jointure pour avoir le nom du patient
+        # 🔥 Récupérer UNIQUEMENT les ventes valides (non annulées)
         ventes = db.execute_query("""
             SELECT 
                 v.id,
@@ -3064,7 +3076,8 @@ def api_activites_recentes():
                 p.prenom
             FROM ventes v
             LEFT JOIN patients p ON v.patient_id = p.id
-            WHERE v.structure_id = %s
+            WHERE v.structure_id = %s 
+            AND (v.statut = 'validee' OR v.statut IS NULL)
             ORDER BY v.date_vente DESC
             LIMIT 10
         """, (structure_id,))
@@ -3072,7 +3085,6 @@ def api_activites_recentes():
         result = []
         for v in ventes:
             if isinstance(v, dict):
-                # 🔥 Priorité au patient_nom, sinon construire depuis la jointure
                 patient_name = v.get('patient_nom', '')
                 if not patient_name or patient_name == '':
                     nom = v.get('nom', '')
@@ -3098,8 +3110,6 @@ def api_activites_recentes():
                     'date': date_str
                 })
             else:
-                # Format tuple: v[0]=id, v[1]=patient_id, v[2]=patient_nom, v[3]=type, 
-                # v[4]=net_a_payer, v[5]=date_vente, v[6]=nom, v[7]=prenom
                 patient_name = v[2] if len(v) > 2 and v[2] else ''
                 if not patient_name and len(v) > 6:
                     patient_name = f"{v[6] or ''} {v[7] or ''}".strip()
@@ -3140,31 +3150,40 @@ def api_add_acte_vente():
     try:
         data = request.json
         structure_id = session.get('structure_id')
+        user_name = session.get('user_name', 'System')
         
         print("=" * 60)
-        print("🔵 VENTE ACTES - INSERTION DIRECTE")
+        print("VENTE ACTES")
         print(f"Patient: {data.get('patient_nom')}")
-        print(f"Actes: {data.get('actes')}")
+        print(f"Vendeur: {user_name}")
         print("=" * 60)
         
         if not structure_id:
-            return jsonify({'success': False, 'error': 'Structure non trouvée'}), 400
+            return jsonify({'success': False, 'error': 'Structure non trouvee'}), 400
         
         patient_id = data.get('patient_id')
         if not patient_id:
             return jsonify({'success': False, 'error': 'ID patient manquant'}), 400
         
-        # 🔥 INSERTION - COPIE EXACTE DU TEST QUI A MARCHÉ
         result = db.execute_query("""
             INSERT INTO ventes (
-                patient_id, patient_nom, structure_id, type, 
-                sous_total, prise_en_charge, net_a_payer, 
-                mode_paiement, taux_assurance, date_vente, actes
+                patient_id, 
+                patient_nom, 
+                structure_id, 
+                type, 
+                sous_total, 
+                prise_en_charge, 
+                net_a_payer, 
+                mode_paiement, 
+                taux_assurance, 
+                date_vente, 
+                actes,
+                created_by_nom
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s::jsonb)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s)
             RETURNING id
         """, (
-            data.get('patient_id'),
+            patient_id,
             data.get('patient_nom', 'Patient'),
             structure_id,
             'actes',
@@ -3173,23 +3192,37 @@ def api_add_acte_vente():
             float(data.get('net_a_payer', 0)),
             data.get('mode_paiement', 'especes'),
             float(data.get('taux_assurance', 0)),
-            json.dumps(data.get('actes', []), ensure_ascii=False)
+            json.dumps(data.get('actes', []), ensure_ascii=False),
+            user_name
         ))
         
         if result and len(result) > 0:
             vente_id = result[0]['id']
-            print(f"✅ Vente actes INSÉRÉE ! ID: {vente_id}")
+            print(f"Vente actes inseree ID: {vente_id} par {user_name}")
             
-            # Vérification immédiate
-            check = db.execute_query("SELECT type FROM ventes WHERE id = %s", (vente_id,))
-            print(f"🔍 Vérification: {check}")
+            # Ajout automatique de la recette
+            net_a_payer = float(data.get('net_a_payer', 0))
+            if net_a_payer > 0:
+                db.execute_query("""
+                    INSERT INTO recettes (structure_id, montant, source, source_id, source_type, description, created_by_nom)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    structure_id,
+                    net_a_payer,
+                    'patients',
+                    vente_id,
+                    'vente_acte',
+                    'Vente actes #' + str(vente_id) + ' - ' + data.get('patient_nom', 'Patient'),
+                    user_name
+                ))
+                print(f"Recette ajoutee: {net_a_payer} FCFA")
             
             return jsonify({'success': True, 'vente_id': vente_id})
         else:
             return jsonify({'success': False, 'error': 'Erreur insertion'}), 500
             
     except Exception as e:
-        print(f"❌ ERREUR: {e}")
+        print(f"ERREUR: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -3197,16 +3230,18 @@ def api_add_acte_vente():
 @app.route('/api/ventes/all')
 @login_required
 def api_get_all_ventes():
-    """Récupérer toutes les ventes (actes + pharmacie) depuis Neon"""
+    """Récupérer toutes les ventes (actes + pharmacie) depuis Neon (hors annulées)"""
     try:
         structure_id = session.get('structure_id')
         
+        # 🔥 Ajout du filtre statut = 'validee' ou IS NULL (pour les anciennes)
         ventes = db.execute_query("""
             SELECT 
                 id, patient_nom, type, net_a_payer, taux_assurance, 
-                date_vente, actes, produits
+                date_vente, actes, produits, statut
             FROM ventes 
-            WHERE structure_id = %s
+            WHERE structure_id = %s 
+            AND (statut = 'validee' OR statut IS NULL)
             ORDER BY date_vente DESC
         """, (structure_id,))
         
@@ -3286,6 +3321,513 @@ def api_get_actes():
     except Exception as e:
         print(f"❌ Erreur: {e}")
         return jsonify([]), 500
+
+@app.route('/api/ventes/<int:vente_id>/annuler', methods=['POST'])
+@login_required
+def annuler_vente(vente_id):
+    """Annuler une vente (admin uniquement)"""
+    import json
+    from datetime import datetime
+    
+    try:
+        # Verifier que l'utilisateur est admin
+        if not session.get('is_admin'):
+            return jsonify({'success': False, 'error': 'Acces non autorise. Reserve a l administrateur.'}), 403
+        
+        data = request.json
+        motif = data.get('motif', 'Annulation manuelle')
+        structure_id = session.get('structure_id')
+        user_id = session.get('user_id')
+        user_name = session.get('user_name', 'Administrateur')
+        
+        # Recuperer la vente
+        vente = db.execute_query("""
+            SELECT * FROM ventes 
+            WHERE id = %s AND structure_id = %s AND (statut = 'validee' OR statut IS NULL)
+        """, (vente_id, structure_id))
+        
+        if not vente or len(vente) == 0:
+            return jsonify({'success': False, 'error': 'Vente non trouvee ou deja annulee'}), 404
+        
+        v = vente[0] if isinstance(vente[0], dict) else vente[0]
+        
+        if isinstance(v, dict):
+            vente_type = v.get('type')
+            produits_data = v.get('produits')
+            net_a_payer = float(v.get('net_a_payer', 0))
+            sous_total = float(v.get('sous_total', 0))
+        else:
+            vente_type = v[3] if len(v) > 3 else None
+            produits_data = v[12] if len(v) > 12 else None
+            net_a_payer = float(v[6]) if len(v) > 6 else 0
+            sous_total = float(v[4]) if len(v) > 4 else 0
+        
+        # Pour la pharmacie : restocker
+        if vente_type == 'pharmacie' and produits_data:
+            if isinstance(produits_data, str):
+                produits_data = json.loads(produits_data)
+            
+            for produit in produits_data:
+                produit_id = produit.get('id')
+                quantite = int(produit.get('quantite', 0))
+                
+                if produit_id and quantite > 0:
+                    db.execute_query("""
+                        UPDATE produits 
+                        SET quantite_stock = quantite_stock + %s,
+                            updated_at = NOW()
+                        WHERE id = %s AND structure_id = %s
+                    """, (quantite, produit_id, structure_id))
+                    print(f"Restocke: {produit.get('nom')} +{quantite}")
+        
+        # Enregistrer l'annulation dans l'historique
+        db.execute_query("""
+            INSERT INTO annulations_ventes (
+                vente_id, vente_type, motif, annule_par_id, annule_par_nom,
+                ancien_net_a_payer, ancien_sous_total, data_avant, date_annulation
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
+        """, (
+            vente_id, vente_type, motif, user_id, user_name,
+            net_a_payer, sous_total, json.dumps(v, default=str)
+        ))
+        
+        # Marquer la vente comme annulee
+        db.execute_query("""
+            UPDATE ventes 
+            SET statut = 'annulee', 
+                annulee_le = NOW(), 
+                annulee_par = %s,
+                motif_annulation = %s
+            WHERE id = %s AND structure_id = %s
+        """, (user_id, motif, vente_id, structure_id))
+        
+        # ANNULER LA RECETTE ASSOCIEE
+        db.execute_query("""
+            UPDATE recettes 
+            SET est_annulation = TRUE, 
+                description = CONCAT(description, ' [ANNULEE - ', %s, ']')
+            WHERE source_id = %s 
+            AND source_type IN ('vente_acte', 'vente_pharma') 
+            AND structure_id = %s
+        """, (motif, vente_id, structure_id))
+        
+        # METTRE A JOUR LE SOLDE DE CAISSE
+        # Recalculer le solde total (recettes non annulees - depenses)
+        db.execute_query("""
+            INSERT INTO caisse (structure_id, solde_actuel, date_mise_a_jour)
+            VALUES (%s, 
+                (SELECT COALESCE(SUM(montant), 0) FROM recettes WHERE structure_id = %s AND est_annulation = FALSE) -
+                (SELECT COALESCE(SUM(montant), 0) FROM depenses WHERE structure_id = %s),
+                NOW())
+            ON CONFLICT (structure_id) DO UPDATE SET 
+                solde_actuel = EXCLUDED.solde_actuel,
+                date_mise_a_jour = NOW()
+        """, (structure_id, structure_id, structure_id))
+        
+        print(f"Vente {vente_id} ({vente_type}) annulee par {user_name}")
+        
+        return jsonify({
+            'success': True, 
+            'message': f'Vente #{vente_id} annulee avec succes',
+            'type': vente_type
+        })
+        
+    except Exception as e:
+        print(f"Erreur annulation: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/historique_annulations')
+@login_required
+def historique_annulations():
+    """Page d'historique des annulations (admin uniquement)"""
+    if not session.get('is_admin'):
+        flash('Accès non autorisé', 'danger')
+        return redirect(url_for('dashboard'))
+    
+    structure_id = session.get('structure_id')
+    
+    annulations = db.execute_query("""
+        SELECT 
+            a.id,
+            a.vente_id,
+            a.vente_type,
+            a.motif,
+            a.annule_par_nom,
+            a.ancien_net_a_payer,
+            a.ancien_sous_total,
+            a.date_annulation,
+            v.patient_nom,
+            v.date_vente as vente_date
+        FROM annulations_ventes a
+        LEFT JOIN ventes v ON a.vente_id = v.id
+        WHERE v.structure_id = %s OR v.structure_id IS NULL
+        ORDER BY a.date_annulation DESC
+    """, (structure_id,))
+    
+    # Convertir les objets datetime en chaînes
+    annulations_list = []
+    for a in annulations:
+        if isinstance(a, dict):
+            date_annulation = a.get('date_annulation')
+            if date_annulation and hasattr(date_annulation, 'strftime'):
+                date_annulation_str = date_annulation.strftime('%Y-%m-%d %H:%M:%S')
+            else:
+                date_annulation_str = str(date_annulation) if date_annulation else ''
+            
+            annulations_list.append({
+                'id': a.get('id'),
+                'vente_id': a.get('vente_id'),
+                'vente_type': a.get('vente_type'),
+                'motif': a.get('motif'),
+                'annule_par_nom': a.get('annule_par_nom'),
+                'ancien_net_a_payer': a.get('ancien_net_a_payer'),
+                'ancien_sous_total': a.get('ancien_sous_total'),
+                'date_annulation': date_annulation_str,
+                'patient_nom': a.get('patient_nom'),
+                'vente_date': a.get('vente_date')
+            })
+        else:
+            # Format tuple
+            date_annulation = a[7] if len(a) > 7 else None
+            if date_annulation and hasattr(date_annulation, 'strftime'):
+                date_annulation_str = date_annulation.strftime('%Y-%m-%d %H:%M:%S')
+            else:
+                date_annulation_str = str(date_annulation) if date_annulation else ''
+            
+            annulations_list.append({
+                'id': a[0],
+                'vente_id': a[1],
+                'vente_type': a[2],
+                'motif': a[3],
+                'annule_par_nom': a[4],
+                'ancien_net_a_payer': a[5],
+                'ancien_sous_total': a[6],
+                'date_annulation': date_annulation_str,
+                'patient_nom': a[8] if len(a) > 8 else None,
+                'vente_date': a[9] if len(a) > 9 else None
+            })
+    
+    return render_template('historique_annulations.html', annulations=annulations_list)
+
+@app.route('/api/annulations')
+@login_required
+def api_get_annulations():
+    """API pour récupérer les annulations (admin uniquement)"""
+    if not session.get('is_admin'):
+        return jsonify({'error': 'Non autorisé'}), 403
+    
+    structure_id = session.get('structure_id')
+    
+    annulations = db.execute_query("""
+        SELECT 
+            a.id,
+            a.vente_id,
+            a.vente_type,
+            a.motif,
+            a.annule_par_nom,
+            a.ancien_net_a_payer,
+            a.ancien_sous_total,
+            a.date_annulation,
+            v.patient_nom,
+            v.date_vente as vente_date
+        FROM annulations_ventes a
+        LEFT JOIN ventes v ON a.vente_id = v.id
+        WHERE v.structure_id = %s OR v.structure_id IS NULL
+        ORDER BY a.date_annulation DESC
+    """, (structure_id,))
+    
+    return jsonify(annulations)
+# ========== GESTION FINANCIÈRE ==========
+
+@app.route('/admin/finances')
+@login_required
+def admin_finances():
+    """Page d'administration financière"""
+    if not session.get('is_admin'):
+        flash('Accès non autorisé', 'danger')
+        return redirect(url_for('dashboard'))
+    
+    structure_id = session.get('structure_id')
+    
+    # Récupérer les recettes
+    recettes = db.execute_query("""
+        SELECT * FROM recettes 
+        WHERE structure_id = %s 
+        ORDER BY date_recette DESC
+    """, (structure_id,))
+    
+    # Récupérer les dépenses
+    depenses = db.execute_query("""
+        SELECT * FROM depenses 
+        WHERE structure_id = %s 
+        ORDER BY date_depense DESC
+    """, (structure_id,))
+    
+    # Récupérer le solde de caisse
+    caisse = db.execute_query("""
+        SELECT * FROM caisse WHERE structure_id = %s
+    """, (structure_id,))
+    
+    solde = caisse[0]['solde_actuel'] if caisse and len(caisse) > 0 else 0
+    
+    # Calculer les totaux
+    total_recettes = db.execute_query("""
+        SELECT COALESCE(SUM(montant), 0) as total FROM recettes WHERE structure_id = %s
+    """, (structure_id,))
+    total_recettes = total_recettes[0]['total'] if total_recettes else 0
+    
+    total_depenses = db.execute_query("""
+        SELECT COALESCE(SUM(montant), 0) as total FROM depenses WHERE structure_id = %s
+    """, (structure_id,))
+    total_depenses = total_depenses[0]['total'] if total_depenses else 0
+    
+    return render_template('admin_finances.html', 
+                         recettes=recettes,
+                         depenses=depenses,
+                         solde=solde,
+                         total_recettes=total_recettes,
+                         total_depenses=total_depenses)
+
+
+@app.route('/api/finances/recettes', methods=['POST'])
+@login_required
+def api_add_recette():
+    """Ajouter une recette"""
+    if not session.get('is_admin'):
+        return jsonify({'success': False, 'error': 'Non autorisé'}), 403
+    
+    try:
+        data = request.json
+        structure_id = session.get('structure_id')
+        user_name = session.get('user_name', 'Admin')
+        
+        result = db.execute_query("""
+            INSERT INTO recettes (structure_id, montant, source, description, created_by_nom)
+            VALUES (%s, %s, %s, %s, %s)
+            RETURNING id
+        """, (
+            structure_id,
+            data.get('montant'),
+            data.get('source', 'autres'),
+            data.get('description', ''),
+            user_name
+        ))
+        
+        # Mettre à jour le solde de caisse
+        db.execute_query("""
+            INSERT INTO caisse (structure_id, solde_actuel, date_mise_a_jour)
+            VALUES (%s, (SELECT COALESCE(SUM(montant), 0) FROM recettes WHERE structure_id = %s) - 
+                         (SELECT COALESCE(SUM(montant), 0) FROM depenses WHERE structure_id = %s), NOW())
+            ON CONFLICT (structure_id) DO UPDATE SET 
+                solde_actuel = EXCLUDED.solde_actuel,
+                date_mise_a_jour = NOW()
+        """, (structure_id, structure_id, structure_id))
+        
+        return jsonify({'success': True, 'id': result[0]['id']})
+        
+    except Exception as e:
+        print(f"❌ Erreur: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ========== API FINANCES ==========
+
+@app.route('/api/finances/stats')
+@login_required
+def api_finances_stats():
+    if not session.get('is_admin'):
+        return jsonify({'error': 'Non autorise'}), 403
+    
+    try:
+        structure_id = session.get('structure_id')
+        date_debut = request.args.get('date_debut')
+        date_fin = request.args.get('date_fin')
+        
+        # Construction de la condition WHERE
+        where_clause = "WHERE structure_id = %s AND (statut = 'validee' OR statut IS NULL)"
+        params = [structure_id]
+        
+        if date_debut and date_fin:
+            # Formater les dates avec l'heure
+            date_debut_formatted = date_debut + " 00:00:00"
+            date_fin_formatted = date_fin + " 23:59:59"
+            where_clause += " AND date_vente BETWEEN %s AND %s"
+            params.extend([date_debut_formatted, date_fin_formatted])
+        
+        # Recettes (ventes non annulees)
+        query = f"""
+            SELECT COALESCE(SUM(net_a_payer), 0) as total
+            FROM ventes 
+            {where_clause}
+        """
+        recettes = db.execute_query(query, params)
+        
+        # Depenses
+        where_clause_dep = "WHERE structure_id = %s"
+        params_dep = [structure_id]
+        
+        if date_debut and date_fin:
+            date_debut_formatted = date_debut + " 00:00:00"
+            date_fin_formatted = date_fin + " 23:59:59"
+            where_clause_dep += " AND date_depense BETWEEN %s AND %s"
+            params_dep.extend([date_debut_formatted, date_fin_formatted])
+        
+        query_dep = f"""
+            SELECT COALESCE(SUM(montant), 0) as total
+            FROM depenses 
+            {where_clause_dep}
+        """
+        depenses = db.execute_query(query_dep, params_dep)
+        
+        # Depenses par motif
+        query_motif = f"""
+            SELECT 
+                motif, 
+                CASE WHEN motif = 'autres' THEN motif_personnalise ELSE motif END as motif_nom,
+                COALESCE(SUM(montant), 0) as total, 
+                COUNT(*) as nombre
+            FROM depenses 
+            {where_clause_dep}
+            GROUP BY motif, motif_personnalise
+            ORDER BY total DESC
+        """
+        depenses_par_motif = db.execute_query(query_motif, params_dep)
+        
+        total_recettes = recettes[0]['total'] if recettes else 0
+        total_depenses = depenses[0]['total'] if depenses else 0
+        
+        return jsonify({
+            'total_recettes': total_recettes,
+            'total_depenses': total_depenses,
+            'solde': total_recettes - total_depenses,
+            'depenses_par_motif': depenses_par_motif
+        })
+        
+    except Exception as e:
+        print(f"Erreur: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/finances/recettes/detail')
+@login_required
+def api_recettes_detail():
+    if not session.get('is_admin'):
+        return jsonify({'error': 'Non autorise'}), 403
+    
+    try:
+        structure_id = session.get('structure_id')
+        date_debut = request.args.get('date_debut')
+        date_fin = request.args.get('date_fin')
+        
+        where_clause = "WHERE structure_id = %s AND (statut = 'validee' OR statut IS NULL)"
+        params = [structure_id]
+        
+        if date_debut and date_fin:
+            date_debut_formatted = date_debut + " 00:00:00"
+            date_fin_formatted = date_fin + " 23:59:59"
+            where_clause += " AND date_vente BETWEEN %s AND %s"
+            params.extend([date_debut_formatted, date_fin_formatted])
+        
+        query = f"""
+            SELECT 
+                type,
+                COUNT(*) as nombre_ventes,
+                COALESCE(SUM(net_a_payer), 0) as total_recettes
+            FROM ventes 
+            {where_clause}
+            GROUP BY type
+        """
+        recettes = db.execute_query(query, params)
+        
+        return jsonify(recettes)
+        
+    except Exception as e:
+        print(f"Erreur: {e}")
+        return jsonify([]), 500
+
+
+@app.route('/api/finances/depenses', methods=['POST'])
+@login_required
+def api_add_depense():
+    """Ajouter une depense"""
+    if not session.get('is_admin'):
+        return jsonify({'success': False, 'error': 'Non autorise'}), 403
+    
+    try:
+        data = request.json
+        structure_id = session.get('structure_id')
+        user_name = session.get('user_name', 'Admin')
+        
+        # Verifier le solde suffisant
+        recettes_total = db.execute_query("""
+            SELECT COALESCE(SUM(net_a_payer), 0) as total
+            FROM ventes 
+            WHERE structure_id = %s AND (statut = 'validee' OR statut IS NULL)
+        """, (structure_id,))
+        
+        depenses_total = db.execute_query("""
+            SELECT COALESCE(SUM(montant), 0) as total
+            FROM depenses 
+            WHERE structure_id = %s
+        """, (structure_id,))
+        
+        solde = (recettes_total[0]['total'] if recettes_total else 0) - (depenses_total[0]['total'] if depenses_total else 0)
+        montant = float(data.get('montant', 0))
+        
+        if montant > solde:
+            return jsonify({'success': False, 'error': f'Solde insuffisant. Solde actuel: {int(solde)} FCFA'}), 400
+        
+        result = db.execute_query("""
+            INSERT INTO depenses (structure_id, montant, motif, motif_personnalise, description, created_by_nom)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            RETURNING id
+        """, (
+            structure_id,
+            montant,
+            data.get('motif'),
+            data.get('motif_personnalise', ''),
+            data.get('description', ''),
+            user_name
+        ))
+        
+        return jsonify({'success': True, 'id': result[0]['id']})
+        
+    except Exception as e:
+        print(f"Erreur api_add_depense: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/statistiques_ventes')
+@login_required
+def statistiques_ventes():
+    """Page des statistiques de ventes pour les employes"""
+    structure_id = session.get('structure_id')
+    
+    # Recuperer toutes les ventes (y compris annulees pour les stats)
+    ventes = db.execute_query("""
+        SELECT 
+            v.id,
+            v.patient_nom,
+            v.type,
+            v.net_a_payer,
+            v.sous_total,
+            v.taux_assurance,
+            v.date_vente,
+            v.mode_paiement,
+            v.statut,
+            v.created_by_nom as vendeur,
+            v.actes,
+            v.produits
+        FROM ventes v
+        WHERE v.structure_id = %s
+        ORDER BY v.date_vente DESC
+    """, (structure_id,))
+    
+    return render_template('statistiques_ventes.html', ventes=ventes)
 
 if __name__ == '__main__':
     # Récupère le port depuis la variable d'environnement ou utilise 5000 par défaut

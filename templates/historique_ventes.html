@@ -430,6 +430,9 @@ function filtrerHistorique() {
     tbody.innerHTML = '';
     let visibleCount = 0;
     
+    // Vérifier si l'utilisateur est admin (variable passée depuis le backend)
+    const isAdmin = {% if session.is_admin %}true{% else %}false{% endif %};
+    
     toutesLesVentes.forEach(vente => {
         let visible = true;
         
@@ -471,15 +474,27 @@ function filtrerHistorique() {
             row.insertCell(6).innerHTML = `${vente.taux_assurance || 0}%`;
             
             const actionCell = row.insertCell(7);
-            actionCell.innerHTML = `<button class="btn btn-sm btn-outline-secondary" onclick="reimprimer(${vente.ID}, '${vente.type}')">
-                                        <i class="fas fa-print"></i>
-                                    </button>`;
+            if (isAdmin) {
+                actionCell.innerHTML = `
+                    <div class="d-flex gap-1 justify-content-center">
+                        <button class="btn btn-sm btn-outline-secondary" onclick="reimprimer(${vente.ID}, '${vente.type}')" title="Réimprimer">
+                            <i class="fas fa-print"></i>
+                        </button>
+                        <button class="btn btn-sm btn-danger" onclick="annulerVente(${vente.ID}, '${vente.type}')" title="Annuler la vente">
+                            <i class="fas fa-ban"></i>
+                        </button>
+                    </div>
+                `;
+            } else {
+                actionCell.innerHTML = `<button class="btn btn-sm btn-outline-secondary" onclick="reimprimer(${vente.ID}, '${vente.type}')" title="Réimprimer">
+                                            <i class="fas fa-print"></i>
+                                        </button>`;
+            }
         }
     });
     
     document.getElementById('resultCount').innerText = visibleCount;
 }
-
 function clearSearch() {
     document.getElementById('searchGlobal').value = '';
     filtrerHistorique();
@@ -628,6 +643,38 @@ function chargerHistorique() {
             document.getElementById('ventesList').innerHTML = '<tr><td colspan="8" class="text-center text-danger">Erreur de chargement des ventes</td></tr>';
             hideLoader();
         });
+}
+
+function annulerVente(venteId, type) {
+    const motif = prompt("Motif de l'annulation (optionnel) :", "Annulation manuelle");
+    
+    if (motif === null) return; // L'utilisateur a annulé
+    
+    if (confirm(`⚠️ Êtes-vous sûr de vouloir ANNULER cette vente ${type.toUpperCase()} #${venteId} ?\n\nCette action est IRRÉVERSIBLE.\n${type === 'pharma' ? 'Les produits seront remis en stock.' : ''}`)) {
+        
+        showLoader('Annulation en cours...');
+        
+        fetch(`/api/ventes/${venteId}/annuler`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({motif: motif})
+        })
+        .then(r => r.json())
+        .then(data => {
+            hideLoader();
+            if (data.success) {
+                alert(`✅ ${data.message}`);
+                // Recharger la page
+                location.reload();
+            } else {
+                alert(`❌ Erreur: ${data.error}`);
+            }
+        })
+        .catch(error => {
+            hideLoader();
+            alert('❌ Erreur lors de l\'annulation');
+        });
+    }
 }
 
 // ========== INITIALISATION ==========
