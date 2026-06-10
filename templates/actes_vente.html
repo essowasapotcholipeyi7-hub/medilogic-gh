@@ -120,7 +120,7 @@
                 </div>
 
                 <div class="row mt-3">
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label class="form-label">Mode de paiement</label>
                         <select class="form-control" id="modePaiement">
                             <option value="especes">💰 Espèces</option>
@@ -130,7 +130,7 @@
                             <option value="cheque">📝 Chèque</option>
                         </select>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label class="form-label">Type de document</label>
                         <select class="form-control" id="typeDocument">
                             <option value="recu_client">📄 Reçu Patient</option>
@@ -138,6 +138,13 @@
                             <option value="facture_client">📑 Facture Patient</option>
                             <option value="facture_structure">🗄️ Facture Structure (archive)</option>
                             <option value="les_deux">📄+📑 Les deux (Patient+Structure)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Format d'impression</label>
+                        <select class="form-control" id="formatImpression">
+                            <option value="80mm" selected>🎫 Format Ticket (80mm)</option>
+                            <option value="A4">📄 Format A4</option>
                         </select>
                     </div>
                     <div class="col-md-4">
@@ -419,7 +426,6 @@ function hideProgress() {
 }
 
 // ========== FINALISATION VENTE ==========
-// ========== FINALISATION VENTE ACTES ==========
 function finaliserVente() {
     console.log('=== FINALISATION VENTE ACTES ===');
     console.log('Panier:', panier);
@@ -437,20 +443,15 @@ function finaliserVente() {
         return;
     }
     
-    // ⚡ DÉSACTIVER LE BOUTON ET AFFICHER CHARGEMENT
     const btn = document.getElementById('finaliserBtn');
     const originalText = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Traitement en cours...';
     
-    // ========== CALCUL DES MONTANTS ==========
     let sousTotal = panier.reduce((sum, item) => sum + item.total, 0);
     let priseEnCharge = (sousTotal * patientTaux) / 100;
     let netAPayer = sousTotal - priseEnCharge;
     
-    console.log('Calculs:', {sousTotal, priseEnCharge, netAPayer});
-    
-    // ========== FORMATER LES ACTES ==========
     let actesData = panier.map(item => ({
         id: parseInt(item.id),
         nom: item.nom,
@@ -459,7 +460,6 @@ function finaliserVente() {
         total: parseFloat(item.total)
     }));
     
-    // ========== CONSTRUCTION DE L'OBJET VENTE ==========
     let vente = {
         patient_id: parseInt(patientId),
         patient_nom: patientName,
@@ -471,11 +471,9 @@ function finaliserVente() {
         taux_assurance: parseFloat(patientTaux)
     };
     
-    console.log('Objet vente envoyé:', vente);
-    
     let typeDocument = document.getElementById('typeDocument').value;
+    let formatImpression = document.getElementById('formatImpression').value;  // ← AJOUT
     
-    // ========== AFFICHER MODALE DE PROGRESSION ==========
     showProgress('Finalisation de la vente', 'Préparation de la vente...');
     updateProgress(10, 'Vérification...');
     
@@ -487,7 +485,6 @@ function finaliserVente() {
         }
     }, 300);
     
-    // ========== ENVOI AU SERVEUR ==========
     fetch('/api/ventes/actes', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -496,30 +493,27 @@ function finaliserVente() {
     .then(response => response.json())
     .then(data => {
         clearInterval(progressInterval);
-        console.log('Réponse API:', data);
         
         if(data.success) {
             updateProgress(100, 'Vente enregistrée !');
             
             setTimeout(() => {
                 hideProgress();
-                
-                // Vider le panier
                 panier = [];
                 afficherPanier();
                 
-                // Redirection selon le type de document
+                // Redirection AVEC le format
                 if (typeDocument === 'recu_client') {
-                    window.location.href = `/recu/${data.vente_id}/actes`;
+                    window.location.href = `/recu/${data.vente_id}/actes?format=${formatImpression}`;
                 } else if (typeDocument === 'recu_structure') {
-                    window.location.href = `/recu_structure/${data.vente_id}/actes`;
+                    window.location.href = `/recu_structure/${data.vente_id}/actes?format=${formatImpression}`;
                 } else if (typeDocument === 'facture_client') {
-                    window.location.href = `/facture/${data.vente_id}/actes`;
+                    window.location.href = `/facture/${data.vente_id}/actes?format=${formatImpression}`;
                 } else if (typeDocument === 'facture_structure') {
-                    window.location.href = `/facture_structure/${data.vente_id}/actes`;
+                    window.location.href = `/facture_structure/${data.vente_id}/actes?format=${formatImpression}`;
                 } else if (typeDocument === 'les_deux') {
-                    window.open(`/recu/${data.vente_id}/actes`, '_blank');
-                    window.open(`/recu_structure/${data.vente_id}/actes`, '_blank');
+                    window.open(`/recu/${data.vente_id}/actes?format=${formatImpression}`, '_blank');
+                    window.open(`/recu_structure/${data.vente_id}/actes?format=${formatImpression}`, '_blank');
                     window.location.href = "/dashboard";
                 } else {
                     window.location.href = "/dashboard";
@@ -541,6 +535,7 @@ function finaliserVente() {
         btn.innerHTML = originalText;
     });
 }
+
 // ========== INITIALISATION ==========
 window.onload = function() {
     checkSelectedPatient();

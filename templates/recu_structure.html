@@ -2,35 +2,136 @@
 
 {% block title %}Copie Reçu #{{ vente_id }}{% endblock %}
 
+{% block extra_css %}
+{% set format = request.args.get('format', 'A4') %}
+
+{% if format == '80mm' %}
+<style>
+    @media print {
+        @page {
+            size: 80mm auto;
+            margin: 3mm;
+        }
+        
+        body {
+            width: 80mm;
+            font-size: 9px;
+            background: white;
+        }
+        
+        .container {
+            width: 100%;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .card {
+            border: none !important;
+            box-shadow: none !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        
+        .card-body {
+            padding: 5px !important;
+        }
+        
+        .row {
+            margin: 0 !important;
+        }
+        
+        .col-7, .col-5 {
+            width: 100%;
+            text-align: center;
+        }
+        
+        h1, h2, h3, h4 {
+            margin: 3px 0;
+            font-size: 11px;
+        }
+        
+        table {
+            font-size: 8px;
+        }
+        
+        table td, table th {
+            padding: 3px 2px !important;
+        }
+        
+        .no-print {
+            display: none !important;
+        }
+        
+        hr {
+            margin: 5px 0;
+        }
+        
+        .d-flex {
+            display: block !important;
+            text-align: center;
+        }
+        
+        img {
+            max-height: 40px !important;
+        }
+        
+        .text-end {
+            text-align: right;
+        }
+    }
+    
+    @media screen {
+        body {
+            background: #e9ecef;
+        }
+        .card {
+            max-width: 400px;
+            margin: 20px auto;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+        }
+    }
+</style>
+{% else %}
+<style>
+    @media print {
+        @page {
+            size: A4;
+            margin: 10mm;
+        }
+    }
+</style>
+{% endif %}
+{% endblock %}
+
 {% block content %}
 <div class="row justify-content-center">
     <div class="col-md-6">
         <div class="card" id="recuContenu">
             <div class="card-body">
                 <!-- En-tête professionnel -->
-<div class="row" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; margin: -20px -20px 20px -20px; padding: 20px; border-radius: 10px 10px 0 0;">
-    <div class="col-7">
-        <div class="d-flex align-items-center gap-3">
-            {% if structure_logo %}
-            <img src="{{ structure_logo }}" alt="Logo" style="max-height: 80px; max-width: 150px; background: white; padding: 5px; border-radius: 8px;">
-            {% endif %}
-            <div>
-                <h2 style="margin: 0;">{{ structure_nom or "Medilogic-GHP" }}</h2>
-                <p style="margin: 5px 0 0 0; font-size: 12px; opacity: 0.9;">
-                    <i class="fas fa-map-marker-alt"></i> {{ structure_adresse or "" }}<br>
-                    <i class="fas fa-phone"></i> {{ structure_telephone or "" }} | 
-                    <i class="fas fa-envelope"></i> {{ structure_email or "" }}
-                </p>
-            </div>
-        </div>
-    </div>
-    <div class="col-5 text-end">
-        <h1 style="font-size: 36px; margin: 0;">REÇU STRUCTURE</h1>
-        <p style="margin: 5px 0 0 0;">N° {{ "%06d" % vente_id }}</p>
-        <p>Date: {{ date_actuelle or "" }}</p>
-    </div>
-</div>
-<hr>
+                <div class="row" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; margin: -20px -20px 20px -20px; padding: 20px; border-radius: 10px 10px 0 0;">
+                    <div class="col-7">
+                        <div class="d-flex align-items-center gap-3">
+                            {% if structure_logo %}
+                            <img src="{{ structure_logo }}" alt="Logo" style="max-height: 80px; max-width: 150px; background: white; padding: 5px; border-radius: 8px;">
+                            {% endif %}
+                            <div>
+                                <h2 style="margin: 0;">{{ structure_nom or "Medilogic-GHP" }}</h2>
+                                <p style="margin: 5px 0 0 0; font-size: 12px; opacity: 0.9;">
+                                    <i class="fas fa-map-marker-alt"></i> {{ structure_adresse or "" }}<br>
+                                    <i class="fas fa-phone"></i> {{ structure_telephone or "" }} | 
+                                    <i class="fas fa-envelope"></i> {{ structure_email or "" }}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-5 text-end">
+                        <h1 style="font-size: 18px; margin: 0;">REÇU STRUCTURE</h1>
+                        <p style="margin: 5px 0 0 0;">N° {{ "%06d" % vente_id }}</p>
+                        <p>Date: {{ date_actuelle or "" }}</p>
+                    </div>
+                </div>
+                <hr>
 
                 <div class="row mb-2">
                     <div class="col-6"><strong>Patient:</strong> {{ patient_nom }}</div>
@@ -41,10 +142,11 @@
                 <table style="width:100%; font-size:11px; border:1px solid #ddd; border-collapse:collapse;">
                     <thead>
                         <tr style="background:#f1f1f1;">
-                            <th style="padding:5px;">Article</th>
-                            <th style="padding:5px; text-align:center;">Qté</th>
-                            <th style="padding:5px; text-align:right;">Total</th>
-                         </tr>
+                            <th style="padding:5px; text-align:left; width:50%;">Article</th>
+                            <th style="padding:5px; text-align:center; width:15%;">Qté</th>
+                            <th style="padding:5px; text-align:right; width:15%;">P.U.</th>
+                            <th style="padding:5px; text-align:right; width:20%;">Total</th>
+                        </tr>
                     </thead>
                     <tbody>
                         {% for article in articles %}
@@ -52,7 +154,7 @@
                             <td style="padding:4px;">{{ article.nom }}</td>
                             <td style="text-align:center;">{{ article.quantite }}</td>
                             <td style="text-align:right;">{{ article.total|round(0)|int }} F</td>
-                         </tr>
+                        </tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -83,13 +185,16 @@
 <script>
 function telechargerPDF() {
     const element = document.getElementById('recuContenu');
-    html2pdf().set({
+    const format = '{{ request.args.get("format", "A4") }}';
+    
+    const opt = {
         margin: [0.5, 0.5, 0.5, 0.5],
         filename: 'copie_recu_{{ vente_id }}.pdf',
         image: { type: 'jpeg', quality: 0.98 },
         html2canvas: { scale: 2 },
-        jsPDF: { unit: 'in', format: 'a5', orientation: 'portrait' }
-    }).from(element).save();
+        jsPDF: { unit: 'in', format: format === '80mm' ? [2.8346, 11.6929] : 'a4', orientation: 'portrait' }
+    };
+    html2pdf().set(opt).from(element).save();
 }
 </script>
 {% endblock %}

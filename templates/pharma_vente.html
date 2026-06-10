@@ -167,7 +167,7 @@
                 </div>
 
                 <div class="row mt-3">
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label class="form-label">Mode de paiement</label>
                         <select class="form-control" id="modePaiement">
                             <option value="especes">💰 Espèces</option>
@@ -177,7 +177,7 @@
                             <option value="cheque">📝 Chèque</option>
                         </select>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label class="form-label">Type de document</label>
                         <select class="form-control" id="typeDocument">
                             <option value="recu_client">📄 Reçu Patient</option>
@@ -185,6 +185,13 @@
                             <option value="facture_client">📑 Facture Patient</option>
                             <option value="facture_structure">🗄️ Facture Structure (archive)</option>
                             <option value="les_deux">📄+📑 Les deux</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Format d'impression</label>
+                        <select class="form-control" id="formatImpression">
+                            <option value="80mm" selected>🎫 Format Ticket (80mm)</option>
+                            <option value="A4">📄 Format A4</option>
                         </select>
                     </div>
                     <div class="col-md-4">
@@ -673,8 +680,6 @@ function updatePanierBadge() {
 }
 
 // ========== FINALISATION AVEC PROGRESSION ==========
-// ========== FINALISATION CORRIGÉE ==========
-// ========== FINALISATION CORRIGÉE AVEC LOGS ==========
 function finaliserVente() {
     console.log('=== DÉBUT FINALISATION VENTE ===');
     console.log('Panier:', JSON.parse(JSON.stringify(panier)));
@@ -685,9 +690,9 @@ function finaliserVente() {
     }
     
     // Récupérer le patient directement depuis sessionStorage
-    const currentPatientId = sessionStorage.getItem('selectedPatientId');
-    const currentPatientName = sessionStorage.getItem('selectedPatientName');
-    const currentPatientTaux = parseFloat(sessionStorage.getItem('selectedPatientTaux') || 0);
+    let currentPatientId = sessionStorage.getItem('selectedPatientId');
+    let currentPatientName = sessionStorage.getItem('selectedPatientName');
+    let currentPatientTaux = parseFloat(sessionStorage.getItem('selectedPatientTaux') || 0);
     
     console.log('Patient depuis sessionStorage:', {
         id: currentPatientId,
@@ -696,7 +701,6 @@ function finaliserVente() {
     });
     
     if (!currentPatientId || currentPatientId === 'null' || currentPatientId === 'undefined') {
-        // Essayer localStorage
         const localId = localStorage.getItem('selectedPatientId');
         if (localId && localId !== 'null') {
             currentPatientId = localId;
@@ -732,12 +736,14 @@ function finaliserVente() {
     const ordonnance = document.getElementById('avecOrdonnance').checked;
     const typeDocument = document.getElementById('typeDocument').value;
     const modePaiement = document.getElementById('modePaiement').value;
+    const formatImpression = document.getElementById('formatImpression').value;  // ← AJOUT
     
     console.log('Calculs:', {
         sousTotal,
         priseEnCharge,
         netAPayer,
-        taux: currentPatientTaux
+        taux: currentPatientTaux,
+        format: formatImpression
     });
     
     // Confirmation détaillée
@@ -756,7 +762,8 @@ function finaliserVente() {
     confirmationMsg += `🎯 Prise en charge (${currentPatientTaux}%): ${priseEnCharge.toLocaleString()} FCFA\n`;
     confirmationMsg += `💵 À payer: ${netAPayer.toLocaleString()} FCFA\n\n`;
     confirmationMsg += `💳 Paiement: ${modePaiement}\n`;
-    confirmationMsg += `📄 Document: ${typeDocument}\n\n`;
+    confirmationMsg += `📄 Document: ${typeDocument}\n`;
+    confirmationMsg += `🖨️ Format: ${formatImpression === '80mm' ? 'Ticket 80mm' : 'A4'}\n\n`;
     confirmationMsg += `✅ Confirmer la vente ?`;
     
     if (!confirm(confirmationMsg)) {
@@ -779,7 +786,6 @@ function finaliserVente() {
     
     console.log('DONNÉES ENVOYÉES AU SERVEUR:', JSON.stringify(venteData, null, 2));
     
-    // Afficher la modale de progression
     showProgress('Finalisation de la vente', 'Préparation de la vente...');
     updateProgress(10, 'Vérification des stocks...');
     
@@ -807,26 +813,24 @@ function finaliserVente() {
             setTimeout(() => {
                 hideProgress();
                 
-                // Sauvegarder l'ID de vente pour les reçus
                 sessionStorage.setItem('lastVenteId', data.vente_id);
                 sessionStorage.setItem('lastVenteData', JSON.stringify(venteData));
                 
-                // Vider le panier
                 panier = [];
                 afficherPanier();
                 
-                // Redirection selon le type de document
+                // Redirection AVEC le format
                 if (typeDocument === 'recu_client') {
-                    window.location.href = `/recu/${data.vente_id}/pharma`;
+                    window.location.href = `/recu/${data.vente_id}/pharma?format=${formatImpression}`;
                 } else if (typeDocument === 'recu_structure') {
-                    window.location.href = `/recu_structure/${data.vente_id}/pharma`;
+                    window.location.href = `/recu_structure/${data.vente_id}/pharma?format=${formatImpression}`;
                 } else if (typeDocument === 'facture_client') {
-                    window.location.href = `/facture/${data.vente_id}/pharma`;
+                    window.location.href = `/facture/${data.vente_id}/pharma?format=${formatImpression}`;
                 } else if (typeDocument === 'facture_structure') {
-                    window.location.href = `/facture_structure/${data.vente_id}/pharma`;
+                    window.location.href = `/facture_structure/${data.vente_id}/pharma?format=${formatImpression}`;
                 } else if (typeDocument === 'les_deux') {
-                    window.open(`/recu/${data.vente_id}/pharma`, '_blank');
-                    window.open(`/recu_structure/${data.vente_id}/pharma`, '_blank');
+                    window.open(`/recu/${data.vente_id}/pharma?format=${formatImpression}`, '_blank');
+                    window.open(`/recu_structure/${data.vente_id}/pharma?format=${formatImpression}`, '_blank');
                     window.location.href = "/dashboard";
                 } else {
                     window.location.href = "/dashboard";
@@ -844,6 +848,7 @@ function finaliserVente() {
         alert('Erreur: ' + error);
     });
 }
+
 // ========== INITIALISATION ==========
 document.addEventListener('DOMContentLoaded', function() {
     checkSelectedPatient();

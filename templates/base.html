@@ -398,48 +398,59 @@
     {% block extra_css %}{% endblock %}
 </head>
 <body>
-    <!-- Navbar moderne -->
-    <nav class="navbar navbar-expand-lg">
-        <div class="container">
-            <a class="navbar-brand" href="{{ url_for('dashboard' if session.user_id else 'index') }}">
-                <i class="fas fa-heartbeat"></i> Medilogic<span style="color: #667eea;">-GHP</span>
-            </a>
-            {% if session.user_id %}
-            <div class="ms-auto d-flex align-items-center gap-3">
-                <!-- Horloge temps réel -->
-                <div class="d-none d-md-block" style="background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); padding: 8px 18px; border-radius: 40px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
-                    <div id="horloge" class="d-flex align-items-center gap-2">
-                        <i class="fas fa-calendar-alt text-primary"></i>
-                        <span id="dateActuelle" style="font-size: 13px; font-weight: 500; color: #4a5568;"></span>
-                        <i class="fas fa-clock text-primary ms-1"></i>
-                        <span id="heureActuelle" style="font-size: 13px; font-weight: 700; background: linear-gradient(135deg, #667eea, #764ba2); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;"></span>
-                    </div>
-                </div>
-                
-                <!-- Version mobile simplifiée -->
-                <div class="d-md-none">
-                    <div id="horlogeMobile" style="background: #f8f9fa; padding: 5px 12px; border-radius: 30px;">
-                        <span id="heureMobile" style="font-size: 12px; font-weight: 600; color: #667eea;"></span>
-                    </div>
-                </div>
-                
-                <div class="dropdown">
-                    <button class="btn btn-light rounded-pill dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                        <i class="fas fa-user-circle"></i> {{ session.user_name|default('Utilisateur') }}
-                    </button>
-                    <ul class="dropdown-menu dropdown-menu-end">
-                        <li><a class="dropdown-item" href="{{ url_for('dashboard') }}"><i class="fas fa-tachometer-alt"></i> Tableau de bord</a></li>
-                        <li><a class="dropdown-item" href="{{ url_for('historique_ventes') }}"><i class="fas fa-history"></i> Historique</a></li>
-                        <li><hr class="dropdown-divider"></li>
-                        <li><a class="dropdown-item" href="{{ url_for('rendez_vous') }}"><i class="fas fa-calendar-alt"></i> Rendez-vous</a></li>
-                        <li><a class="dropdown-item text-danger" href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i> Déconnexion</a></li>
-                    </ul>
+
+<!-- Navbar moderne -->
+<nav class="navbar navbar-expand-lg">
+    <div class="container">
+        <a class="navbar-brand" href="{{ url_for('dashboard' if session.user_id else 'index') }}">
+            <i class="fas fa-heartbeat"></i> Medilogic<span style="color: #667eea;">-GHP</span>
+        </a>
+        
+        <!-- 🔥 AFFICHAGE DU NOM DE LA STRUCTURE (centré) 🔥 -->
+        {% if session.user_id and session.structure_nom %}
+        <div class="mx-auto">
+            <div class="d-none d-md-block" style="background: linear-gradient(135deg, #667eea15, #764ba215); padding: 6px 16px; border-radius: 30px;">
+                <i class="fas fa-building me-1" style="color: #667eea;"></i>
+                <span style="font-weight: 600; font-size: 14px; color: #4a5568;">{{ session.structure_nom }}</span>
+            </div>
+        </div>
+        {% endif %}
+        
+        {% if session.user_id %}
+        <div class="ms-auto d-flex align-items-center gap-3">
+            <!-- Horloge temps réel -->
+            <div class="d-none d-md-block" style="background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); padding: 8px 18px; border-radius: 40px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+                <div id="horloge" class="d-flex align-items-center gap-2">
+                    <i class="fas fa-calendar-alt text-primary"></i>
+                    <span id="dateActuelle" style="font-size: 13px; font-weight: 500; color: #4a5568;"></span>
+                    <i class="fas fa-clock text-primary ms-1"></i>
+                    <span id="heureActuelle" style="font-size: 13px; font-weight: 700; background: linear-gradient(135deg, #667eea, #764ba2); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;"></span>
                 </div>
             </div>
-            {% endif %}
+            
+            <!-- Version mobile simplifiée -->
+            <div class="d-md-none">
+                <div id="horlogeMobile" style="background: #f8f9fa; padding: 5px 12px; border-radius: 30px;">
+                    <span id="heureMobile" style="font-size: 12px; font-weight: 600; color: #667eea;"></span>
+                </div>
+            </div>
+            
+            <div class="dropdown">
+                <button class="btn btn-light rounded-pill dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                    <i class="fas fa-user-circle"></i> {{ session.user_name|default('Utilisateur') }}
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li><a class="dropdown-item" href="{{ url_for('dashboard') }}"><i class="fas fa-tachometer-alt"></i> Tableau de bord</a></li>
+                    <li><a class="dropdown-item" href="{{ url_for('historique_ventes') }}"><i class="fas fa-history"></i> Historique</a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item" href="{{ url_for('rendez_vous') }}"><i class="fas fa-calendar-alt"></i> Rendez-vous</a></li>
+                    <li><a class="dropdown-item text-danger" href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i> Déconnexion</a></li>
+                </ul>
+            </div>
         </div>
-    </nav>
-
+        {% endif %}
+    </div>
+</nav>
     <!-- BANDEAU PATIENT SÉLECTIONNÉ -->
     {% if session.user_id %}
     <div class="container mt-3">
@@ -506,6 +517,12 @@
     {% if session.structure_telephone %}
     localStorage.setItem('structureTelephone', '{{ session.structure_telephone }}');
     {% endif %}
+    {% if session.structure_logo %}
+    localStorage.setItem('structureLogo', '{{ session.structure_logo }}');
+    {% endif %}
+    {% if session.structure_email %}
+    localStorage.setItem('structureEmail', '{{ session.structure_email }}');
+    {% endif %}
     
     // Récupérer le nom de la structure
     function getStructureNom(callback) {
@@ -524,23 +541,32 @@
             .catch(() => callback('Notre établissement'));
     }
     
-    // Charger les infos de la structure au démarrage
-    function chargerInfosStructure() {
-        fetch('/api/structure/infos')
-            .then(response => response.json())
-            .then(data => {
-                if (data.nom) localStorage.setItem('structureNom', data.nom);
-                if (data.telephone) localStorage.setItem('structureTelephone', data.telephone);
-                console.log('📞 Téléphone chargé:', data.telephone);
-            })
-            .catch(err => console.error('Erreur chargement infos structure:', err));
-    }
-    
-    // Appeler au chargement de la page
-    if (window.location.pathname !== '/login' && window.location.pathname !== '/') {
-        chargerInfosStructure();
-    }
-    
+// Charger les infos de la structure au démarrage
+function chargerInfosStructure() {
+    fetch('/api/structure/infos')
+        .then(response => response.json())
+        .then(data => {
+            if (data.nom) {
+                localStorage.setItem('structureNom', data.nom);
+            }
+            if (data.telephone) {
+                localStorage.setItem('structureTelephone', data.telephone);
+            }
+            if (data.logo_url) {
+                localStorage.setItem('structureLogo', data.logo_url);
+            }
+            if (data.email) {
+                localStorage.setItem('structureEmail', data.email);
+            }
+            console.log('Infos structure chargées:', data);
+        })
+        .catch(err => console.error('Erreur chargement infos structure:', err));
+}
+
+// Appeler au chargement de la page
+if (window.location.pathname !== '/login' && window.location.pathname !== '/') {
+    chargerInfosStructure();
+}    
     // Chargement du patient sélectionné
     function loadSelectedPatient() {
         let patientId = sessionStorage.getItem('selectedPatientId');

@@ -53,6 +53,7 @@
                                         <th>Nom</th>
                                         <th>Email</th>
                                         <th>Rôle</th>
+                                        <th>Statut</th>
                                         <th>Date création</th>
                                         <th>Actions</th>
                                     </tr>
@@ -76,20 +77,33 @@
                                                 <span class="badge bg-secondary">{{ user.role }}</span>
                                             {% endif %}
                                         </td>
+                                        <td>
+                                            {% if user.actif == 'oui' or user.actif == 'true' or user.actif == '1' %}
+                                                <span class="badge bg-success" id="statutBadge{{ user.ID }}">Actif</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary" id="statutBadge{{ user.ID }}">Inactif</span>
+                                            {% endif %}
+                                        </td>
                                         <td>{{ user.created_at[:10] if user.created_at else '-' }}</td>
                                         <td>
-                                            <button class="btn btn-sm btn-danger" onclick="deleteUser({{ user.ID }})">
+                                            <button class="btn btn-sm btn-warning" onclick="toggleUserStatus({{ user.ID }}, '{{ user.actif }}')" title="Activer/Désactiver">
+                                                <i class="fas fa-power-off"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-danger" onclick="deleteUser({{ user.ID }})" title="Supprimer">
                                                 <i class="fas fa-trash"></i>
                                             </button>
+                                            <button class="btn btn-sm btn-info" onclick='editUser({{ user.ID }}, "{{ user.nom }}", "{{ user.email }}", "{{ user.role }}", "{{ user.actif }}")' title="Modifier">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
                                         </td>
-                                    </tr>
+                                     </tr>
                                     {% else %}
                                     <tr>
-                                        <td colspan="6" class="text-center">Aucun utilisateur</td>
-                                    </tr>
+                                        <td colspan="7" class="text-center">Aucun utilisateur</td>
+                                     </tr>
                                     {% endfor %}
                                 </tbody>
-                            </table>
+                             </table>
                         </div>
                     </div>
                 </div>
@@ -258,9 +272,17 @@
                         <label class="form-label">Rôle</label>
                         <select class="form-control" id="userRole">
                             <option value="caissier">Caissier</option>
+                            <option value="secretaire">Secretaire</option>
                             <option value="medecin">Médecin</option>
                             <option value="pharmacien">Pharmacien</option>
                             <option value="admin">Administrateur</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Statut</label>
+                        <select class="form-control" id="userActif">
+                            <option value="oui">Actif</option>
+                            <option value="non">Inactif</option>
                         </select>
                     </div>
                 </form>
@@ -657,18 +679,30 @@ function deleteActe(id) {
 // ========== GESTION UTILISATEURS ==========
 function showAddUserModal() {
     document.getElementById('userModalTitle').innerText = 'Ajouter un utilisateur';
-    document.getElementById('userId').value = '';
+    document.getElementById('userId').value = '';  // ← Vide pour ajout
     document.getElementById('userForm').reset();
+    document.getElementById('userActif').value = 'oui';
     new bootstrap.Modal(document.getElementById('userModal')).show();
 }
 
+function showEditUserModal(userId, nom, email, role, actif) {
+    document.getElementById('userModalTitle').innerText = 'Modifier un utilisateur';
+    document.getElementById('userId').value = userId;  // ← Rempli pour modification
+    document.getElementById('userNom').value = nom;
+    document.getElementById('userEmail').value = email;
+    document.getElementById('userPassword').value = '';
+    document.getElementById('userRole').value = role;
+    document.getElementById('userActif').value = actif === 'oui' ? 'oui' : 'non';
+    new bootstrap.Modal(document.getElementById('userModal')).show();
+}
 function saveUser() {
     const data = {
         id: document.getElementById('userId').value,
         nom: document.getElementById('userNom').value,
         email: document.getElementById('userEmail').value,
         password: document.getElementById('userPassword').value,
-        role: document.getElementById('userRole').value
+        role: document.getElementById('userRole').value,
+        actif: document.getElementById('userActif').value
     };
     
     if (!data.nom || !data.email) {
@@ -676,30 +710,72 @@ function saveUser() {
         return;
     }
     
+    showLoader();
+    
     fetch('/api/admin/users', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(data)
     })
     .then(r => r.json())
-    .then(data => { 
-        if(data.success) {
+    .then(data => {
+        hideLoader();
+        if (data.success) {
+            alert(data.id ? 'Utilisateur modifié' : 'Utilisateur ajouté');
             location.reload();
         } else {
             alert('Erreur: ' + (data.error || 'Erreur inconnue'));
         }
+    })
+    .catch(error => {
+        hideLoader();
+        alert('Erreur: ' + error);
     });
+}
+
+// 🔥 NOUVELLE FONCTION : Activer/Désactiver un utilisateur
+function toggleUserStatus(userId, actuel) {
+    const nouveauStatut = (actuel === 'oui' || actuel === 'true' || actuel === '1') ? 'non' : 'oui';
+    const message = nouveauStatut === 'oui' ? 'activer' : 'désactiver';
+    
+    if (confirm(`Voulez-vous ${message} cet utilisateur ?`)) {
+        showLoader();
+        
+        fetch(`/api/admin/users/${userId}/toggle`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({actif: nouveauStatut})
+        })
+        .then(r => r.json())
+        .then(data => {
+            hideLoader();
+            if (data.success) {
+                alert(`Utilisateur ${message} avec succès`);
+                location.reload();
+            } else {
+                alert('Erreur: ' + data.error);
+            }
+        })
+        .catch(error => {
+            hideLoader();
+            alert('Erreur: ' + error);
+        });
+    }
 }
 
 function deleteUser(id) {
     if (confirm('Supprimer cet utilisateur ?')) {
+        showLoader();
+        
         fetch(`/api/admin/users/${id}`, { method: 'DELETE' })
             .then(r => r.json())
-            .then(data => { 
-                if(data.success) {
+            .then(data => {
+                hideLoader();
+                if (data.success) {
+                    alert('Utilisateur supprimé');
                     location.reload();
                 } else {
-                    alert('Erreur: ' + (data.error || 'Erreur inconnue'));
+                    alert('Erreur: ' + data.error);
                 }
             });
     }

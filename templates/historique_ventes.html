@@ -58,7 +58,11 @@
                     <div class="col-md-3 text-center">
                         <div class="border rounded p-2">
                             <small class="text-muted">Chiffre d'affaires</small>
+                            {% if session.is_admin %}
                             <h3 class="text-success mb-0" id="statCA">0 F</h3>
+                            {% else %}
+                            <h3 class="text-muted mb-0">•••••••</h3>
+                            {% endif %}
                         </div>
                     </div>
                     <div class="col-md-3 text-center">
@@ -100,62 +104,95 @@
             </div>
         </div>
 
-        <!-- FILTRES -->
-        <div class="card mb-3">
-            <div class="card-header bg-secondary text-white">
-                <h5><i class="fas fa-filter"></i> Filtres</h5>
+<!-- FILTRES -->
+<div class="card mb-3">
+    <div class="card-header bg-secondary text-white">
+        <h5><i class="fas fa-filter"></i> Filtres</h5>
+    </div>
+    <div class="card-body">
+        <!-- Première ligne : filtres principaux -->
+        <div class="row g-2 mb-2">
+            <div class="col-md-3">
+                <label class="form-label small">Periode</label>
+                <select id="periodeFiltre" class="form-control form-control-sm" onchange="changerPeriodeFiltre()">
+                    <option value="tous">Toutes les ventes</option>
+                    <option value="aujourdhui">Aujourd'hui</option>
+                    <option value="semaine">Cette semaine</option>
+                    <option value="mois">Ce mois</option>
+                    <option value="annee">Cette annee</option>
+                    <option value="personnalise">Periode personnalisee</option>
+                </select>
             </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-3">
-                        <select id="periodeFiltre" class="form-control" onchange="changerPeriodeFiltre()">
-                            <option value="tous">📋 Toutes les ventes</option>
-                            <option value="aujourdhui">📅 Aujourd'hui</option>
-                            <option value="semaine">📆 Cette semaine</option>
-                            <option value="mois">📅 Ce mois</option>
-                            <option value="annee">📊 Cette année</option>
-                            <option value="personnalise">📅 Période personnalisée</option>
-                        </select>
-                    </div>
-                    <div class="col-md-3">
-                        <select id="searchType" class="form-control" onchange="filtrerHistorique()">
-                            <option value="">📋 Tous les types</option>
-                            <option value="actes">🏥 Actes médicaux</option>
-                            <option value="pharma">💊 Pharmacie</option>
-                        </select>
-                    </div>
-                    <div class="col-md-3" id="dateDebutGroup" style="display: none;">
-                        <input type="date" id="filtreDateDebut" class="form-control" placeholder="Date début">
-                    </div>
-                    <div class="col-md-3" id="dateFinGroup" style="display: none;">
-                        <input type="date" id="filtreDateFin" class="form-control" placeholder="Date fin">
-                    </div>
-                    <div class="col-md-6 mt-2">
-                        <div class="input-group">
-                            <span class="input-group-text bg-white">
-                                <i class="fas fa-search text-primary"></i>
-                            </span>
-                            <input type="text" id="searchGlobal" class="form-control" 
-                                   placeholder="🔍 Rechercher par acte, produit ou patient..." 
-                                   onkeyup="filtrerHistorique()">
-                            <button class="btn btn-outline-secondary" onclick="clearSearch()" type="button">
-                                <i class="fas fa-times"></i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                <div class="row mt-2">
-                    <div class="col-md-12">
-                        <button class="btn btn-secondary btn-sm" onclick="resetFiltres()">🔄 Réinitialiser</button>
-                        <span class="ms-3 text-muted"><span id="resultCount">0</span> résultat(s) trouvé(s)</span>
-                    </div>
-                    <button class="btn btn-sm btn-info ms-2" onclick="chargerHistorique()">
-                        <i class="fas fa-sync-alt"></i> Rafraîchir
+            <div class="col-md-3" id="dateDebutGroup" style="display: none;">
+                <label class="form-label small">Date debut</label>
+                <input type="date" id="filtreDateDebut" class="form-control form-control-sm">
+            </div>
+            <div class="col-md-3" id="dateFinGroup" style="display: none;">
+                <label class="form-label small">Date fin</label>
+                <input type="date" id="filtreDateFin" class="form-control form-control-sm">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small">Type de vente</label>
+                <select id="searchType" class="form-control form-control-sm" onchange="filtrerHistorique()">
+                    <option value="">Tous les types</option>
+                    <option value="actes">Actes medicaux</option>
+                    <option value="pharma">Pharmacie</option>
+                </select>
+            </div>
+        </div>
+        
+        <!-- Deuxieme ligne : filtres heure -->
+        <div class="row g-2 mb-2">
+            <div class="col-md-3">
+                <label class="form-label small">Heure debut</label>
+                <input type="time" id="filtreHeureDebut" class="form-control form-control-sm" onchange="filtrerHistorique()">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small">Heure fin</label>
+                <input type="time" id="filtreHeureFin" class="form-control form-control-sm" onchange="filtrerHistorique()">
+            </div>
+            <div class="col-md-6">
+                <label class="form-label small">Recherche</label>
+                <div class="input-group">
+                    <span class="input-group-text bg-white">
+                        <i class="fas fa-search text-primary"></i>
+                    </span>
+                    <input type="text" id="searchGlobal" class="form-control form-control-sm" 
+                           placeholder="Patient, acte, produit..." 
+                           onkeyup="filtrerHistorique()">
+                    <button class="btn btn-outline-secondary btn-sm" onclick="clearSearch()" type="button">
+                        <i class="fas fa-times"></i>
                     </button>
                 </div>
             </div>
         </div>
-
+        
+        <!-- Troisieme ligne : boutons actions -->
+        <div class="row g-2">
+            <div class="col-md-12">
+                <button class="btn btn-secondary btn-sm" onclick="resetFiltres()">
+                    <i class="fas fa-sync-alt"></i> Reinitialiser
+                </button>
+                <button class="btn btn-info btn-sm ms-2" onclick="chargerHistorique()">
+                    <i class="fas fa-sync-alt"></i> Rafraichir
+                </button>
+                <button class="btn btn-outline-primary btn-sm ms-2" onclick="filtrerParPriseDeService()">
+                    <i class="fas fa-sun"></i> Prise service (8h-16h)
+                </button>
+                <button class="btn btn-outline-warning btn-sm ms-2" onclick="filtrerParFinService()">
+                    <i class="fas fa-moon"></i> Fin service (16h-23h)
+                </button>
+                <button class="btn btn-outline-dark btn-sm ms-2" onclick="filtrerGardeNuit()">
+                    <i class="fas fa-moon"></i> Garde nuit (16h-8h)
+                </button>
+                <span class="ms-3 text-muted">
+                    <i class="fas fa-chart-simple"></i> 
+                    <span id="resultCount">0</span> resultat(s) trouve(s)
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
         <!-- LISTE DES VENTES -->
         <div class="card">
             <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
@@ -198,9 +235,25 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
+                <!-- 🔥 AJOUT : Sélecteur de format 🔥 -->
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Format d'impression</label>
+                    <select id="printFormat" class="form-control">
+                        <option value="80mm">🎫 Format Ticket (80mm)</option>
+                        <option value="A4">📄 Format A4 (Standard)</option>
+                    </select>
+                    <div class="form-text text-muted small">
+                        <i class="fas fa-info-circle"></i> Choisissez A4 pour une imprimante laser, ou 80mm pour une imprimante à ticket.
+                    </div>
+                </div>
+                <!-- Fin de l'ajout -->
+                
                 <div class="d-grid gap-2">
                     <button class="btn btn-outline-primary" onclick="printDocument('recu_client')">
                         <i class="fas fa-receipt"></i> Reçu Patient
+                    </button>
+                    <button class="btn btn-outline-info" onclick="printDocument('les_deux_recus')">
+                        <i class="fas fa-copy"></i> Reçu Patient + Reçu Tiers Payant
                     </button>
                     <button class="btn btn-outline-secondary" onclick="printDocument('recu_structure')">
                         <i class="fas fa-copy"></i> Reçu Structure (copie)
@@ -223,7 +276,6 @@
         </div>
     </div>
 </div>
-
 <script>
 let currentVenteId = null;
 let currentVenteType = null;
@@ -375,10 +427,48 @@ function changerPeriodeFiltre() {
     filtrerHistorique();
 }
 
+// Filtre pour la prise de service (8h-16h)
+function filtrerParPriseService() {
+    document.getElementById('periodeFiltre').value = 'aujourdhui';
+    document.getElementById('filtreHeureDebut').value = '08:00';
+    document.getElementById('filtreHeureFin').value = '16:00';
+    document.getElementById('dateDebutGroup').style.display = 'none';
+    document.getElementById('dateFinGroup').style.display = 'none';
+    filtrerHistorique();
+}
+
+// Filtre pour la fin de service (16h-23h59)
+function filtrerParFinService() {
+    document.getElementById('periodeFiltre').value = 'aujourdhui';
+    document.getElementById('filtreHeureDebut').value = '16:00';
+    document.getElementById('filtreHeureFin').value = '23:59';
+    document.getElementById('dateDebutGroup').style.display = 'none';
+    document.getElementById('dateFinGroup').style.display = 'none';
+    filtrerHistorique();
+}
+
+// Filtre pour la garde de nuit (hier 16h - aujourd'hui 8h)
+function filtrerGardeNuit() {
+    const hier = new Date();
+    hier.setDate(hier.getDate() - 1);
+    const dateHier = hier.toISOString().split('T')[0];
+    const aujourdhui = new Date().toISOString().split('T')[0];
+    
+    document.getElementById('periodeFiltre').value = 'personnalise';
+    document.getElementById('filtreDateDebut').value = dateHier;
+    document.getElementById('filtreDateFin').value = aujourdhui;
+    document.getElementById('filtreHeureDebut').value = '16:00';
+    document.getElementById('filtreHeureFin').value = '08:00';
+    document.getElementById('dateDebutGroup').style.display = 'block';
+    document.getElementById('dateFinGroup').style.display = 'block';
+    filtrerHistorique();
+}
 function filtrerHistorique() {
     const periode = document.getElementById('periodeFiltre').value;
     const searchType = document.getElementById('searchType').value;
     const searchGlobal = document.getElementById('searchGlobal').value.toLowerCase().trim();
+    const heureDebut = document.getElementById('filtreHeureDebut').value;
+    const heureFin = document.getElementById('filtreHeureFin').value;
     
     let debut, fin;
     const aujourdhui = new Date();
@@ -430,12 +520,12 @@ function filtrerHistorique() {
     tbody.innerHTML = '';
     let visibleCount = 0;
     
-    // Vérifier si l'utilisateur est admin (variable passée depuis le backend)
     const isAdmin = {% if session.is_admin %}true{% else %}false{% endif %};
     
     toutesLesVentes.forEach(vente => {
         let visible = true;
         
+        // Filtre par date
         if (debut && fin) {
             const dateVente = vente.date || '';
             if (dateVente) {
@@ -444,10 +534,50 @@ function filtrerHistorique() {
             }
         }
         
+        // Filtre par heure avec gestion des dates différentes
+        if (visible && (heureDebut || heureFin)) {
+            const dateVente = vente.date || '';
+            if (dateVente) {
+                const dateObj = new Date(dateVente);
+                const heures = dateObj.getHours().toString().padStart(2, '0');
+                const minutes = dateObj.getMinutes().toString().padStart(2, '0');
+                const heureVente = `${heures}:${minutes}`;
+                
+                // Verifier si la periode couvre deux jours
+                const estDeuxJours = debut && fin && debut.toDateString() !== fin.toDateString();
+                
+                if (estDeuxJours && heureDebut && heureFin) {
+                    const dateVenteStr = dateObj.toISOString().split('T')[0];
+                    const debutStr = debut.toISOString().split('T')[0];
+                    const finStr = fin.toISOString().split('T')[0];
+                    
+                    if (dateVenteStr === debutStr) {
+                        // Premier jour : vente apres heure debut
+                        if (heureVente < heureDebut) visible = false;
+                    } else if (dateVenteStr === finStr) {
+                        // Deuxieme jour : vente avant heure fin
+                        if (heureVente > heureFin) visible = false;
+                    }
+                } 
+                // Cas garde de nuit (debut >= fin) sur une seule journee
+                else if (heureDebut && heureFin && heureDebut >= heureFin) {
+                    const visibleNuit = (heureVente >= heureDebut) || (heureVente <= heureFin);
+                    if (!visibleNuit) visible = false;
+                } 
+                // Cas normal (un seul jour)
+                else {
+                    if (heureDebut && heureVente < heureDebut) visible = false;
+                    if (heureFin && heureVente > heureFin) visible = false;
+                }
+            }
+        }
+        
+        // Filtre par type
         if (visible && searchType && vente.type !== searchType) {
             visible = false;
         }
         
+        // Filtre global par recherche
         if (visible && searchGlobal) {
             const texteComplet = `${vente.patient_nom || ''} ${vente.detail || ''} ${vente.net_a_payer || ''}`.toLowerCase();
             if (!texteComplet.includes(searchGlobal)) visible = false;
@@ -464,9 +594,9 @@ function filtrerHistorique() {
             
             const typeCell = row.insertCell(3);
             if (vente.type === 'actes') {
-                typeCell.innerHTML = '<span class="badge bg-primary">🏥 Acte</span>';
+                typeCell.innerHTML = '<span class="badge bg-primary">Acte</span>';
             } else {
-                typeCell.innerHTML = '<span class="badge bg-success">💊 Pharmacie</span>';
+                typeCell.innerHTML = '<span class="badge bg-success">Pharmacie</span>';
             }
             
             row.insertCell(4).innerHTML = `<small>${vente.detail || '-'}</small>`;
@@ -477,7 +607,7 @@ function filtrerHistorique() {
             if (isAdmin) {
                 actionCell.innerHTML = `
                     <div class="d-flex gap-1 justify-content-center">
-                        <button class="btn btn-sm btn-outline-secondary" onclick="reimprimer(${vente.ID}, '${vente.type}')" title="Réimprimer">
+                        <button class="btn btn-sm btn-outline-secondary" onclick="reimprimer(${vente.ID}, '${vente.type}')" title="Reimprimer">
                             <i class="fas fa-print"></i>
                         </button>
                         <button class="btn btn-sm btn-danger" onclick="annulerVente(${vente.ID}, '${vente.type}')" title="Annuler la vente">
@@ -486,7 +616,7 @@ function filtrerHistorique() {
                     </div>
                 `;
             } else {
-                actionCell.innerHTML = `<button class="btn btn-sm btn-outline-secondary" onclick="reimprimer(${vente.ID}, '${vente.type}')" title="Réimprimer">
+                actionCell.innerHTML = `<button class="btn btn-sm btn-outline-secondary" onclick="reimprimer(${vente.ID}, '${vente.type}')" title="Reimprimer">
                                             <i class="fas fa-print"></i>
                                         </button>`;
             }
@@ -506,11 +636,12 @@ function resetFiltres() {
     document.getElementById('searchGlobal').value = '';
     document.getElementById('filtreDateDebut').value = '';
     document.getElementById('filtreDateFin').value = '';
+    document.getElementById('filtreHeureDebut').value = '';
+    document.getElementById('filtreHeureFin').value = '';
     document.getElementById('dateDebutGroup').style.display = 'none';
     document.getElementById('dateFinGroup').style.display = 'none';
     filtrerHistorique();
 }
-
 // ========== RÉIMPRESSION ==========
 function reimprimer(venteId, type) {
     currentVenteId = venteId;
@@ -519,17 +650,29 @@ function reimprimer(venteId, type) {
 }
 
 function printDocument(docType) {
+    const format = document.getElementById('printFormat').value;
     let url = '';
-    if (docType === 'recu_client') url = `/recu/${currentVenteId}/${currentVenteType}`;
-    else if (docType === 'recu_structure') url = `/recu_structure/${currentVenteId}/${currentVenteType}`;
-    else if (docType === 'facture_client') url = `/facture/${currentVenteId}/${currentVenteType}`;
-    else if (docType === 'facture_structure') url = `/facture_structure/${currentVenteId}/${currentVenteType}`;
-    else if (docType === 'les_deux') {
-        window.open(`/recu/${currentVenteId}/${currentVenteType}`, '_blank');
-        window.open(`/recu_structure/${currentVenteId}/${currentVenteType}`, '_blank');
+    
+    if (docType === 'recu_client') {
+        url = `/recu/${currentVenteId}/${currentVenteType}?format=${format}`;
+    } else if (docType === 'recu_structure') {
+        url = `/recu_structure/${currentVenteId}/${currentVenteType}?format=${format}`;
+    } else if (docType === 'les_deux_recus') {
+        window.open(`/recu/${currentVenteId}/${currentVenteType}?format=${format}`, '_blank');
+        window.open(`/recu_structure/${currentVenteId}/${currentVenteType}?format=${format}`, '_blank');
+        bootstrap.Modal.getInstance(document.getElementById('documentModal')).hide();
+        return;
+    } else if (docType === 'facture_client') {
+        url = `/facture/${currentVenteId}/${currentVenteType}?format=${format}`;
+    } else if (docType === 'facture_structure') {
+        url = `/facture_structure/${currentVenteId}/${currentVenteType}?format=${format}`;
+    } else if (docType === 'les_deux') {
+        window.open(`/recu/${currentVenteId}/${currentVenteType}?format=${format}`, '_blank');
+        window.open(`/recu_structure/${currentVenteId}/${currentVenteType}?format=${format}`, '_blank');
         bootstrap.Modal.getInstance(document.getElementById('documentModal')).hide();
         return;
     }
+    
     window.open(url, '_blank');
     bootstrap.Modal.getInstance(document.getElementById('documentModal')).hide();
 }

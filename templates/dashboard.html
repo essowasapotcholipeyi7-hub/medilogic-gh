@@ -210,6 +210,13 @@
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body p-4">
+               <div class="mb-3">
+                    <label class="form-label fw-semibold">Format d'impression</label>
+                    <select id="printFormat" class="form-control">
+                        <option value="80mm" selected>🎫 Format Ticket (80mm)</option>
+                        <option value="A4">📄 Format A4</option>
+                    </select>
+                </div>
                 <div class="row g-2" id="printOptions"></div>
             </div>
         </div>
@@ -225,11 +232,12 @@ function reimprimer(venteId, type) {
     currentVenteType = type;
     
     const options = [
-        { label: '📄 Reçu Patient', action: 'recu_client', class: 'btn-outline-primary' },
-        { label: '📋 Reçu Structure (copie)', action: 'recu_structure', class: 'btn-outline-secondary' },
-        { label: '📑 Facture Patient', action: 'facture_client', class: 'btn-outline-success' },
-        { label: '🗄️ Facture Structure (archive)', action: 'facture_structure', class: 'btn-outline-danger' },
-        { label: '🖨️ Les deux (Patient + Structure)', action: 'les_deux', class: 'btn-outline-info' }
+        { label: 'Reçu Patient', action: 'recu_client', class: 'btn-outline-primary' },
+        { label: 'Reçu Structure (copie)', action: 'recu_structure', class: 'btn-outline-secondary' },
+        { label: 'Reçu Patient + Tiers Payant', action: 'les_deux_recus', class: 'btn-outline-info' },
+        { label: 'Facture Patient', action: 'facture_client', class: 'btn-outline-success' },
+        { label: 'Facture Structure (archive)', action: 'facture_structure', class: 'btn-outline-danger' },
+        { label: 'Les deux (Patient + Structure)', action: 'les_deux', class: 'btn-outline-info' }
     ];
     
     const container = document.getElementById('printOptions');
@@ -243,20 +251,26 @@ function reimprimer(venteId, type) {
     
     new bootstrap.Modal(document.getElementById('printModal')).show();
 }
-
 function printDocument(action) {
+    const format = document.getElementById('printFormat').value;
     let url = '';
+    
     if (action === 'recu_client') {
-        url = `/recu/${currentVenteId}/${currentVenteType}`;
+        url = `/recu/${currentVenteId}/${currentVenteType}?format=${format}`;
     } else if (action === 'recu_structure') {
-        url = `/recu_structure/${currentVenteId}/${currentVenteType}`;
+        url = `/recu_structure/${currentVenteId}/${currentVenteType}?format=${format}`;
+    } else if (action === 'les_deux_recus') {
+        window.open(`/recu/${currentVenteId}/${currentVenteType}?format=${format}`, '_blank');
+        window.open(`/recu_structure/${currentVenteId}/${currentVenteType}?format=${format}`, '_blank');
+        bootstrap.Modal.getInstance(document.getElementById('printModal')).hide();
+        return;
     } else if (action === 'facture_client') {
-        url = `/facture/${currentVenteId}/${currentVenteType}`;
+        url = `/facture/${currentVenteId}/${currentVenteType}?format=${format}`;
     } else if (action === 'facture_structure') {
-        url = `/facture_structure/${currentVenteId}/${currentVenteType}`;
+        url = `/facture_structure/${currentVenteId}/${currentVenteType}?format=${format}`;
     } else if (action === 'les_deux') {
-        window.open(`/recu/${currentVenteId}/${currentVenteType}`, '_blank');
-        window.open(`/recu_structure/${currentVenteId}/${currentVenteType}`, '_blank');
+        window.open(`/recu/${currentVenteId}/${currentVenteType}?format=${format}`, '_blank');
+        window.open(`/recu_structure/${currentVenteId}/${currentVenteType}?format=${format}`, '_blank');
         bootstrap.Modal.getInstance(document.getElementById('printModal')).hide();
         return;
     }
@@ -264,7 +278,6 @@ function printDocument(action) {
     window.open(url, '_blank');
     bootstrap.Modal.getInstance(document.getElementById('printModal')).hide();
 }
-
 // ========== CHARGEMENT DES DONNÉES DU DASHBOARD ==========
 function chargerDashboard() {
     // Charger le nombre de patients

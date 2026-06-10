@@ -370,6 +370,29 @@
                             </div>
                         </div>
 
+            <!-- 🔥 NOUVEAU : RECETTES PAR SOURCE ET DEPENSES PAR MOTIF 🔥 -->
+            <div class="row mt-3">
+                <div class="col-md-6">
+                    <div class="card bg-light border-0">
+                        <div class="card-body">
+                            <h6 class="text-muted">Recettes par source</h6>
+                            <div id="recettesParSource">
+                                <span class="spinner-border spinner-border-sm"></span> Chargement...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card bg-light border-0">
+                        <div class="card-body">
+                            <h6 class="text-muted">Depenses par motif</h6>
+                            <div id="depensesParMotif">
+                                <span class="spinner-border spinner-border-sm"></span> Chargement...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
                         <!-- Dépenses par motif -->
                         <div class="card mt-3">
                             <div class="card-header bg-secondary text-white">
@@ -584,6 +607,14 @@ function chargerSolde() {
     fetch('/api/finances/stats')
         .then(response => response.json())
         .then(data => {
+            // data.total_recettes inclut deja:
+            // - paiements des patients (ventes)
+            // - remboursements des assurances
+            // - autres recettes manuelles
+            
+            // data.total_depenses inclut:
+            // - salaires, fournitures, reparations, etc.
+            
             const totalRecettes = data.total_recettes || 0;
             const totalDepenses = data.total_depenses || 0;
             const solde = totalRecettes - totalDepenses;
@@ -595,26 +626,27 @@ function chargerSolde() {
             const totalDepensesElement = document.getElementById('totalDepensesCard');
             const tauxElement = document.getElementById('tauxDepenses');
             
-            if (soldeElement) soldeElement.innerHTML = Math.round(solde).toLocaleString() + ' FCFA';
-            if (totalRecettesElement) totalRecettesElement.innerHTML = Math.round(totalRecettes).toLocaleString() + ' FCFA';
-            if (totalDepensesElement) totalDepensesElement.innerHTML = Math.round(totalDepenses).toLocaleString() + ' FCFA';
+            if (soldeElement) soldeElement.innerHTML = Math.round(solde).toLocaleString('fr-FR') + ' FCFA';
+            if (totalRecettesElement) totalRecettesElement.innerHTML = Math.round(totalRecettes).toLocaleString('fr-FR') + ' FCFA';
+            if (totalDepensesElement) totalDepensesElement.innerHTML = Math.round(totalDepenses).toLocaleString('fr-FR') + ' FCFA';
             if (tauxElement) tauxElement.innerHTML = taux + '%';
+            
+            // Afficher aussi le detail des recettes par source
+            chargerDetailRecettes();
         })
-        .catch(error => console.error('Erreur:', error));
+        .catch(error => console.error('Erreur chargerSolde:', error));
 }
 
-// Appeler au chargement et quand on clique sur l'onglet Depenses
-document.addEventListener('DOMContentLoaded', function() {
-    chargerSolde();
-    genererRapport();
-});
-
-const depensesTab = document.getElementById('depenses-tab');
-if (depensesTab) {
-    depensesTab.addEventListener('click', function() {
-        chargerSolde();
-    });
+function chargerDetailRecettes() {
+    fetch('/api/finances/recettes/source')
+        .then(response => response.json())
+        .then(data => {
+            // Afficher le detail dans une section si besoin
+            console.log('Recettes par source:', data);
+        })
+        .catch(err => console.error('Erreur:', err));
 }
+
 // ========== RAPPORTS ==========
 function genererRapport() {
     let dateDebut = document.getElementById('rapportDateDebut').value;
@@ -699,6 +731,7 @@ function genererRapport() {
             console.error('Erreur:', error);
             alert('Erreur lors de la génération du rapport');
         });
+chargerDetailFinances();
 }
 
 function exporterRapport() {
@@ -758,6 +791,69 @@ if (rapportsTab) {
             genererRapport();
         }
     });
+}
+
+function chargerDetailFinances() {
+    // Recettes par source
+    fetch('/api/finances/recettes/source')
+        .then(r => r.json())
+        .then(data => {
+            const container = document.getElementById('recettesParSource');
+            if (container) {
+                if (data && data.length) {
+                    container.innerHTML = data.map(s => `
+                        <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+                            <span class="fw-semibold">${s.source}</span>
+                            <span class="text-success fw-bold">${Math.round(s.total).toLocaleString('fr-FR')} FCFA</span>
+                        </div>
+                    `).join('');
+                } else {
+                    container.innerHTML = '<p class="text-muted mb-0">Aucune recette</p>';
+                }
+            }
+        })
+        .catch(err => {
+            console.error('Erreur:', err);
+            const container = document.getElementById('recettesParSource');
+            if (container) container.innerHTML = '<p class="text-danger">Erreur chargement</p>';
+        });
+    
+    // Depenses par motif
+    fetch('/api/finances/depenses/motif')
+        .then(r => r.json())
+        .then(data => {
+            const container = document.getElementById('depensesParMotif');
+            if (container) {
+                if (data && data.length) {
+                    container.innerHTML = data.map(d => {
+                        let motifLabel = d.motif;
+                        if (motifLabel === 'salaire') motifLabel = 'Salaires';
+                        else if (motifLabel === 'reparation') motifLabel = 'Reparations';
+                        else if (motifLabel === 'fourniture') motifLabel = 'Fournitures';
+                        else if (motifLabel === 'assurance') motifLabel = 'Assurances';
+                        else if (motifLabel === 'eau') motifLabel = 'Eau';
+                        else if (motifLabel === 'electricite') motifLabel = 'Electricite';
+                        else if (motifLabel === 'internet') motifLabel = 'Internet';
+                        else if (motifLabel === 'loyer') motifLabel = 'Loyer';
+                        else motifLabel = motifLabel.charAt(0).toUpperCase() + motifLabel.slice(1);
+                        
+                        return `
+                            <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+                                <span class="fw-semibold">${motifLabel}</span>
+                                <span class="text-danger fw-bold">${Math.round(d.total).toLocaleString('fr-FR')} FCFA</span>
+                            </div>
+                        `;
+                    }).join('');
+                } else {
+                    container.innerHTML = '<p class="text-muted mb-0">Aucune depense</p>';
+                }
+            }
+        })
+        .catch(err => {
+            console.error('Erreur:', err);
+            const container = document.getElementById('depensesParMotif');
+            if (container) container.innerHTML = '<p class="text-danger">Erreur chargement</p>';
+        });
 }
 </script>
 {% endblock %}

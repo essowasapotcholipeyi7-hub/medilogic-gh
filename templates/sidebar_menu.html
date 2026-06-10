@@ -1,4 +1,4 @@
-<div class="sidebar">
+<div class="sidebar" style="max-height: calc(100vh - 100px); overflow-y: auto;">
     <h5 class="mb-3"><i class="fas fa-chart-line"></i> Menu</h5>
     <div class="nav flex-column">
         <!-- Principal -->
@@ -47,14 +47,14 @@
         <a class="nav-link" href="{{ url_for('historique_annulations') }}">
             <i class="fas fa-ban"></i> Annulations
         </a>
-        <a class="nav-link" href="{{ url_for('statistiques_ventes') }}">
-            <i class="fas fa-chart-bar"></i> Statistiques ventes
-        </a>
         
         <!-- Administration (admin uniquement) -->
         {% if session.is_admin %}
         <a class="nav-link" href="{{ url_for('admin_finances') }}">
             <i class="fas fa-coins"></i> Finances
+        </a>
+        <a class="nav-link" href="{{ url_for('statistiques_ventes') }}">
+            <i class="fas fa-chart-bar"></i> Statistiques ventes
         </a>
         <a class="nav-link" href="{{ url_for('admin_structure') }}">
             <i class="fas fa-cog"></i> Administration
