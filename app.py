@@ -5,6 +5,7 @@ from sheets_helper import sheets_helper
 import hashlib
 import secrets
 from datetime import datetime
+from datetime import date
 import json
 import os
 import pandas as pd
@@ -490,7 +491,6 @@ def patients():
         flash('Structure non trouvée', 'error')
         return redirect(url_for('dashboard'))
     
-    # Récupérer depuis Neon
     try:
         patients = db.execute_query("""
             SELECT id, nom, prenom, telephone, adresse, date_naissance,
@@ -500,48 +500,44 @@ def patients():
             ORDER BY id DESC
         """, (structure_id,))
         
-        print(f"📊 Requête SQL exécutée pour structure {structure_id}")
-        print(f"   Type de résultat: {type(patients)}")
-        
-        # Convertir pour le template
         patients_list = []
         if patients:
-            if isinstance(patients, list):
-                for p in patients:
-                    if isinstance(p, dict):
-                        patients_list.append({
-                            'ID': p.get('id'),
-                            'nom': p.get('nom', ''),
-                            'prenom': p.get('prenom', ''),
-                            'telephone': p.get('telephone', ''),
-                            'adresse': p.get('adresse', ''),
-                            'date_naissance': p.get('date_naissance', ''),
-                            'type_assurance': p.get('type_assurance', 'non_assure'),
-                            'taux_prise_charge': p.get('taux_prise_charge', 0),
-                            'numero_assure': p.get('numero_assure', '')
-                        })
-                    elif isinstance(p, (list, tuple)) and len(p) >= 9:
-                        patients_list.append({
-                            'ID': p[0],
-                            'nom': p[1] or '',
-                            'prenom': p[2] or '',
-                            'telephone': p[3] or '',
-                            'adresse': p[4] or '',
-                            'date_naissance': p[5] or '',
-                            'type_assurance': p[6] or 'non_assure',
-                            'taux_prise_charge': p[7] or 0,
-                            'numero_assure': p[8] or ''
-                        })
-        
-        print(f"📊 Patients envoyés au template: {len(patients_list)}")
+            for p in patients:
+                if isinstance(p, dict):
+                    date_naissance = p.get('date_naissance')
+                    patients_list.append({
+                        'ID': p.get('id'),
+                        'nom': p.get('nom', ''),
+                        'prenom': p.get('prenom', ''),
+                        'telephone': p.get('telephone', ''),
+                        'adresse': p.get('adresse', ''),
+                        'date_naissance': date_naissance.strftime('%Y-%m-%d') if date_naissance else '',
+                        'age': calculer_age(date_naissance) if date_naissance else None,
+                        'type_assurance': p.get('type_assurance', 'non_assure'),
+                        'taux_prise_charge': p.get('taux_prise_charge', 0),
+                        'numero_assure': p.get('numero_assure', '')
+                    })
+                else:
+                    date_naissance = p[5] if len(p) > 5 else None
+                    patients_list.append({
+                        'ID': p[0],
+                        'nom': p[1] or '',
+                        'prenom': p[2] or '',
+                        'telephone': p[3] or '',
+                        'adresse': p[4] or '',
+                        'date_naissance': date_naissance.strftime('%Y-%m-%d') if date_naissance else '',
+                        'age': calculer_age(date_naissance) if date_naissance else None,
+                        'type_assurance': p[6] or 'non_assure',
+                        'taux_prise_charge': p[7] or 0,
+                        'numero_assure': p[8] or ''
+                    })
         
         return render_template('patients.html', patients=patients_list)
         
     except Exception as e:
-        print(f"❌ Erreur lors du chargement des patients: {e}")
-        flash(f'Erreur lors du chargement des patients: {str(e)}', 'error')
+        print(f"❌ Erreur: {e}")
+        flash(f'Erreur: {str(e)}', 'error')
         return render_template('patients.html', patients=[])
-
 
 @app.route('/api/patients', methods=['POST'])
 @login_required
@@ -584,12 +580,8 @@ def api_add_patient():
 @app.route('/api/patients/<int:id>', methods=['GET'])
 @login_required
 def api_get_patient(id):
-    """Récupérer un patient par son ID"""
     try:
         structure_id = session.get('structure_id')
-        
-        if not structure_id:
-            return jsonify({'success': False, 'error': 'Structure non trouvée'}), 400
         
         patient = db.execute_query("""
             SELECT id, nom, prenom, telephone, adresse, date_naissance,
@@ -601,28 +593,42 @@ def api_get_patient(id):
         if not patient or len(patient) == 0:
             return jsonify({'success': False, 'error': 'Patient non trouvé'}), 404
         
-        # Convertir en dictionnaire
         if isinstance(patient[0], dict):
-            patient_data = patient[0]
+            p = patient[0]
+            date_naissance = p.get('date_naissance')
+            result = {
+                'id': p.get('id'),
+                'nom': p.get('nom', ''),
+                'prenom': p.get('prenom', ''),
+                'telephone': p.get('telephone', ''),
+                'adresse': p.get('adresse', ''),
+                'date_naissance': date_naissance.strftime('%Y-%m-%d') if date_naissance else '',
+                'age': calculer_age(date_naissance) if date_naissance else None,
+                'type_assurance': p.get('type_assurance', 'non_assure'),
+                'taux_prise_charge': p.get('taux_prise_charge', 0),
+                'numero_assure': p.get('numero_assure', '')
+            }
         else:
-            patient_data = {
-                'id': patient[0][0],
-                'nom': patient[0][1],
-                'prenom': patient[0][2],
-                'telephone': patient[0][3],
-                'adresse': patient[0][4],
-                'date_naissance': patient[0][5],
-                'type_assurance': patient[0][6],
-                'taux_prise_charge': patient[0][7],
-                'numero_assure': patient[0][8]
+            p = patient[0]
+            date_naissance = p[5] if len(p) > 5 else None
+            result = {
+                'id': p[0],
+                'nom': p[1],
+                'prenom': p[2],
+                'telephone': p[3],
+                'adresse': p[4],
+                'date_naissance': date_naissance.strftime('%Y-%m-%d') if date_naissance else '',
+                'age': calculer_age(date_naissance) if date_naissance else None,
+                'type_assurance': p[6] if len(p) > 6 else 'non_assure',
+                'taux_prise_charge': p[7] if len(p) > 7 else 0,
+                'numero_assure': p[8] if len(p) > 8 else ''
             }
         
-        return jsonify(patient_data)
+        return jsonify(result)
         
     except Exception as e:
         print(f"❌ Erreur GET patient: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
-
 
 # ROUTE de vérification (pour debug)
 @app.route('/check_sheets')
@@ -4457,6 +4463,16 @@ def api_finances_depenses_motif():
     except Exception as e:
         print(f"Erreur: {e}")
         return jsonify([]), 500
+
+def calculer_age(date_naissance):
+    """Calcule l'âge à partir d'une date de naissance"""
+    if not date_naissance:
+        return None
+    today = date.today()
+    age = today.year - date_naissance.year
+    if (today.month, today.day) < (date_naissance.month, date_naissance.day):
+        age -= 1
+    return age
 
 if __name__ == '__main__':
     # Récupère le port depuis la variable d'environnement ou utilise 5000 par défaut

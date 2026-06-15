@@ -42,61 +42,69 @@
                     </div>
                 </div>
                 
-                <div class="table-responsive">
-                    <table class="table table-hover" id="patientsTable">
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>Nom complet</th>
-                                <th>Téléphone</th>
-                                <th>Adresse</th>
-                                <th>Date naissance</th>
-                                <th>Assurance</th>
-                                <th>Taux</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="patientsList">
-                            {% for patient in patients %}
-                            <tr class="patient-row" data-id="{{ patient.ID }}">
-                                <td>{{ patient.ID }}</td>
-                                <td>{{ patient.nom }} {{ patient.prenom }}</td>
-                                <td>{{ patient.telephone }}</td>
-                                <td>{{ patient.adresse or '-' }}</td>
-                                <td>{{ patient.date_naissance or '-' }}</td>
-                                <td>
-                                    {% if patient.type_assurance == 'non_assure' %}
-                                        <span class="badge bg-secondary">Non assuré</span>
-                                    {% elif patient.type_assurance == 'amu_cnss' %}
-                                        <span class="badge bg-success">AMU-CNSS</span>
-                                    {% elif patient.type_assurance == 'amu_inam' %}
-                                        <span class="badge bg-primary">AMU-INAM</span>
-                                    {% else %}
-                                        <span class="badge bg-info">{{ patient.type_assurance }}</span>
-                                    {% endif %}
-                                </td>
-                                <td>{{ patient.taux_prise_charge or 0 }}%</td>
-                                <td>
-                                    <button class="btn btn-sm btn-success" onclick='selectPatient({{ patient.ID }}, "{{ patient.nom }} {{ patient.prenom }}", "{{ patient.type_assurance }}", {{ patient.taux_prise_charge or 0 }})'>
-                                        <i class="fas fa-check"></i>
-                                    </button>
-                                    <button class="btn btn-sm btn-warning" onclick="editPatient({{ patient.ID }})">
-                                        <i class="fas fa-edit"></i>
-                                    </button>
-                                    <button class="btn btn-sm btn-info" onclick="envoyerLienPatient({{ patient.ID }}, '{{ patient.nom }} {{ patient.prenom }}', '{{ patient.telephone }}')">
-                                        <i class="fab fa-whatsapp"></i>
-                                    </button>
-                                </td>
-                            </tr>
-                            {% else %}
-                            <tr>
-                                <td colspan="8" class="text-center">Aucun patient</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                
+<div class="table-responsive">
+    <table class="table table-hover table-bordered" id="patientsTable">
+        <thead class="table-light">
+            <tr>
+                <th style="width: 5%">ID</th>
+                <th style="width: 20%">Nom complet</th>
+                <th style="width: 15%">Téléphone</th>
+                <th style="width: 20%">Adresse</th>
+                <th style="width: 15%">Date naissance / Âge</th>
+                <th style="width: 15%">Assurance</th>
+                <th style="width: 5%">Taux</th>
+                <th style="width: 5%">Actions</th>
+            </tr>
+        </thead>
+        <tbody id="patientsList">
+            {% for patient in patients %}
+            <tr class="patient-row" data-id="{{ patient.ID }}">
+                <td style="vertical-align: middle; text-align: center;">{{ patient.ID }}</td>
+                <td style="vertical-align: middle;">{{ patient.nom }} {{ patient.prenom }}</td>
+                <td style="vertical-align: middle;">{{ patient.telephone }}</td>
+                <td style="vertical-align: middle;">{{ patient.adresse or '-' }}</td>
+                <td style="vertical-align: middle;">
+                    {% if patient.date_naissance %}
+                        {{ patient.date_naissance }} 
+                        <span class="text-muted">({{ patient.age }} ans)</span>
+                    {% else %}
+                        <span class="text-muted">-</span>
+                    {% endif %}
+                </td>
+                <td style="vertical-align: middle;">
+                    {% if patient.type_assurance == 'non_assure' %}
+                        <span class="badge bg-secondary">Non assuré</span>
+                    {% elif patient.type_assurance == 'amu_cnss' %}
+                        <span class="badge bg-success">AMU-CNSS</span>
+                    {% elif patient.type_assurance == 'amu_inam' %}
+                        <span class="badge bg-primary">AMU-INAM</span>
+                    {% else %}
+                        <span class="badge bg-info">{{ patient.type_assurance }}</span>
+                    {% endif %}
+                </td>
+                <td style="vertical-align: middle; text-align: center;">{{ patient.taux_prise_charge or 0 }}%</td>
+                <td style="vertical-align: middle; text-align: center;">
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-success" onclick='selectPatient({{ patient.ID }}, "{{ patient.nom }} {{ patient.prenom }}", "{{ patient.type_assurance }}", {{ patient.taux_prise_charge or 0 }})' title="Sélectionner">
+                            <i class="fas fa-check"></i>
+                        </button>
+                        <button class="btn btn-warning" onclick="editPatient({{ patient.ID }})" title="Modifier">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn btn-info" onclick="envoyerLienPatient({{ patient.ID }}, '{{ patient.nom }} {{ patient.prenom }}', '{{ patient.telephone }}')" title="WhatsApp">
+                            <i class="fab fa-whatsapp"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="8" class="text-center">Aucun patient</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>                
                 <!-- Pagination -->
                 <div class="row mt-3">
                     <div class="col-12">
@@ -139,8 +147,14 @@
                         <input type="text" class="form-control" id="adresse">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Date de naissance</label>
+                        <label class="form-label">Date de naissance <span class="text-muted">(optionnel)</span></label>
                         <input type="date" class="form-control" id="date_naissance">
+                        <small class="text-muted">Laissez vide si non renseignée</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Âge</label>
+                        <input type="number" class="form-control" id="age" readonly>
+                        <small class="text-muted">Calculé automatiquement</small>
                     </div>
                     
                     <div class="mb-3">
@@ -208,8 +222,12 @@
                         <input type="text" class="form-control" id="editAdresse">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Date de naissance</label>
+                        <label class="form-label">Date de naissance <span class="text-muted">(optionnel)</span></label>
                         <input type="date" class="form-control" id="editDateNaissance">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Âge</label>
+                        <input type="number" class="form-control" id="editAge" readonly>
                     </div>
                     <div class="row">
                         <div class="col-md-6 mb-3">
@@ -251,6 +269,32 @@ let currentPage = 1;
 let rowsPerPage = 10;
 let currentFiltered = [];
 
+// Fonction pour calculer l'âge
+function calculerAge(dateNaissance) {
+    if (!dateNaissance) return '';
+    const today = new Date();
+    const birthDate = new Date(dateNaissance);
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const m = today.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+    }
+    return age;
+}
+
+// Mettre à jour l'âge automatiquement
+function updateAge() {
+    const dateNaissance = document.getElementById('date_naissance').value;
+    const age = calculerAge(dateNaissance);
+    document.getElementById('age').value = age;
+}
+
+function updateEditAge() {
+    const dateNaissance = document.getElementById('editDateNaissance').value;
+    const age = calculerAge(dateNaissance);
+    document.getElementById('editAge').value = age;
+}
+
 // Initialisation
 document.addEventListener('DOMContentLoaded', function() {
     const rows = document.querySelectorAll('#patientsList tr.patient-row');
@@ -271,6 +315,10 @@ document.addEventListener('DOMContentLoaded', function() {
     updateResultCount();
     updatePagination();
     displayPage(1);
+    
+    // Écouter les changements de date
+    document.getElementById('date_naissance').addEventListener('change', updateAge);
+    document.getElementById('editDateNaissance').addEventListener('change', updateEditAge);
 });
 
 function filterPatients() {
@@ -423,6 +471,7 @@ function showAddModal() {
     document.getElementById('taux_prise_charge').readOnly = true;
     document.getElementById('numero_assure_div').style.display = 'none';
     document.getElementById('autre_assurance_div').style.display = 'none';
+    document.getElementById('age').value = '';
     new bootstrap.Modal(document.getElementById('patientModal')).show();
 }
 
@@ -439,7 +488,7 @@ function savePatient() {
         prenom: document.getElementById('prenom').value,
         telephone: document.getElementById('telephone').value,
         adresse: document.getElementById('adresse').value,
-        date_naissance: document.getElementById('date_naissance').value,
+        date_naissance: document.getElementById('date_naissance').value || null,
         type_assurance: typeAssurance,
         taux_prise_charge: document.getElementById('taux_prise_charge').value,
         numero_assure: document.getElementById('numero_assure').value
@@ -468,7 +517,7 @@ function savePatient() {
     });
 }
 
-// ========== MODIFICATION PATIENT (CORRIGÉE - utilise les données du tableau) ==========
+// ========== MODIFICATION PATIENT ==========
 function editPatient(id) {
     if (!id || id === 'undefined') {
         alert('Erreur: ID patient invalide');
@@ -490,7 +539,7 @@ function editPatient(id) {
     const nom = firstSpace > 0 ? nomComplet.substring(0, firstSpace) : nomComplet;
     const prenom = firstSpace > 0 ? nomComplet.substring(firstSpace + 1) : '';
     
-    // Extraire le texte d'assurance et le convertir en valeur
+    // Extraire le texte d'assurance
     const assuranceText = cells[5].innerText.toLowerCase();
     let assuranceValue = 'non_assure';
     let autreAssuranceValue = '';
@@ -510,7 +559,11 @@ function editPatient(id) {
     document.getElementById('editPrenom').value = prenom;
     document.getElementById('editTelephone').value = cells[2].innerText;
     document.getElementById('editAdresse').value = cells[3].innerText !== '-' ? cells[3].innerText : '';
-    document.getElementById('editDateNaissance').value = cells[4].innerText !== '-' ? cells[4].innerText : '';
+    
+    const dateNaissance = cells[4].innerText !== '-' ? cells[4].innerText.split(' ')[0] : '';
+    document.getElementById('editDateNaissance').value = dateNaissance;
+    document.getElementById('editAge').value = calculerAge(dateNaissance);
+    
     document.getElementById('editTaux').value = cells[6].innerText.replace('%', '');
     document.getElementById('editAssurance').value = assuranceValue;
     document.getElementById('editAutreAssurance').value = autreAssuranceValue;
@@ -535,7 +588,7 @@ function saveEditPatient() {
         prenom: document.getElementById('editPrenom').value,
         telephone: document.getElementById('editTelephone').value,
         adresse: document.getElementById('editAdresse').value,
-        date_naissance: document.getElementById('editDateNaissance').value,
+        date_naissance: document.getElementById('editDateNaissance').value || null,
         type_assurance: typeAssurance,
         taux_prise_charge: document.getElementById('editTaux').value,
         numero_assure: document.getElementById('editNumeroAssure').value
@@ -571,13 +624,11 @@ function selectPatient(id, nom, assurance, taux) {
         return;
     }
     
-    // Nettoyer les anciennes données
     sessionStorage.removeItem('selectedPatientId');
     sessionStorage.removeItem('selectedPatientName');
     sessionStorage.removeItem('selectedPatientAssurance');
     sessionStorage.removeItem('selectedPatientTaux');
     
-    // Définir les nouvelles données
     sessionStorage.setItem('selectedPatientId', id);
     sessionStorage.setItem('selectedPatientName', nom);
     sessionStorage.setItem('selectedPatientAssurance', assurance);
@@ -593,6 +644,7 @@ function selectPatient(id, nom, assurance, taux) {
         window.location.href = '/pharma_vente';
     }
 }
+
 // ========== ENVOI LIEN WHATSAPP ==========
 function envoyerLienPatient(id, nom, telephone) {
     if (!id || id === 'undefined') {
@@ -624,13 +676,13 @@ function envoyerLienPatient(id, nom, telephone) {
             alert('Erreur lors de l\'envoi');
         });
 }
+
 function chargerPatients() {
     showLoader();
     
     fetch('/api/patients')
         .then(response => response.json())
         .then(data => {
-            // Afficher les patients
             hideLoader();
         })
         .catch(() => hideLoader());
