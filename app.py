@@ -664,66 +664,112 @@ def actes_vente():
 @app.route('/pharma_vente')
 @login_required
 def pharma_vente():
+    # 🔥 Lire les produits depuis Google Sheets
     produits = sheets_helper.get_all_records('produits')
+    
+    # Filtrer par structure
+    structure_id = session.get('structure_id')
+    produits_filtres = [p for p in produits if str(p.get('structure_id')) == str(structure_id)]
+    
     patients = sheets_helper.get_all_records('patients')
     
-    print(f"🔍 Produits trouvés: {len(produits)}")  # Debug
-    for p in produits:
-        print(f"   - {p.get('nom')}: {p.get('prix_vente')} FCFA (Stock: {p.get('quantite_stock')})")
+    print(f"🔍 Produits trouvés dans Sheets: {len(produits_filtres)}")
     
-    return render_template('pharma_vente.html', produits=produits, patients=patients)
+    return render_template('pharma_vente.html', produits=produits_filtres, patients=patients)
 
 @app.route('/api/ventes/pharma', methods=['POST'])
 @login_required
 def api_add_pharma_vente():
     try:
         data = request.json
-        print("📦 Données reçues pharma:", data)
-        
         structure_id = session.get('structure_id')
-        date_now = datetime.now().isoformat()
+        
+        print("=" * 60)
+        print("📦 VENTE PHARMACIE")
+        print(f"Patient: {data.get('patient_nom')}")
+        print(f"Produits: {data.get('produits')}")
+        print("=" * 60)
+        
+        if not structure_id:
+            return jsonify({'success': False, 'error': 'Structure non trouvee'}), 400
+        
+        patient_id = data.get('patient_id')
+        if not patient_id:
+            return jsonify({'success': False, 'error': 'ID patient manquant'}), 400
+        
+        from datetime import datetime
+        import json
         
         # 🔥 1. Enregistrer la vente dans Neon
         result = db.execute_query("""
-            INSERT INTO ventes (structure_id, patient_id, patient_nom, type, produits,
-                                sous_total, prise_en_charge, net_a_payer, mode_paiement, taux_assurance, date_vente)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO ventes (
+                patient_id, patient_nom, structure_id, type, 
+                sous_total, prise_en_charge, net_a_payer, 
+                mode_paiement, taux_assurance, date_vente, produits
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s::jsonb)
             RETURNING id
         """, (
+            patient_id,
+            data.get('patient_nom', 'Patient'),
             structure_id,
-            data.get('patient_id'),
-            data.get('patient_nom'),
-            'pharma',
-            json.dumps(data.get('produits')),  # Stocker les produits en JSON
-            data.get('sous_total'),
-            data.get('prise_en_charge'),
-            data.get('net_a_payer'),
-            data.get('mode_paiement'),
-            data.get('taux_assurance'),
-            date_now
+            'pharmacie',
+            float(data.get('sous_total', 0)),
+            float(data.get('prise_en_charge', 0)),
+            float(data.get('net_a_payer', 0)),
+            data.get('mode_paiement', 'especes'),
+            float(data.get('taux_assurance', 0)),
+            json.dumps(data.get('produits', []), ensure_ascii=False)
         ))
         
-        if not result:
+        if not result or len(result) == 0:
             return jsonify({'success': False, 'error': 'Erreur insertion vente'}), 500
         
-        new_id = result[0]['id']
+        vente_id = result[0]['id']
+        print(f"✅ Vente enregistrée dans Neon avec ID: {vente_id}")
         
-        # 🔥 2. Mettre à jour les stocks dans Neon
-        for produit in data.get('produits', []):
-            db.execute_query("""
-                UPDATE produits 
-                SET quantite_stock = quantite_stock - %s,
-                    updated_at = NOW()
-                WHERE id = %s AND structure_id = %s
-            """, (produit.get('quantite'), produit.get('id'), structure_id))
-            print(f"📦 Stock mis à jour: {produit.get('nom')} - {produit.get('quantite')} unités vendues")
+        # 🔥 2. Mettre à jour les stocks dans Google Sheets (pas Neon)
+        try:
+            sheet_name = f"struct_{structure_id}_produits"
+            print(f"   📂 Accès à la feuille: {sheet_name}")
+            
+            worksheet = sheets_helper.spreadsheet.worksheet(sheet_name)
+            
+            for produit in data.get('produits', []):
+                produit_id = str(produit.get('id'))
+                quantite_vendue = int(produit.get('quantite', 0))
+                produit_nom = produit.get('nom', 'Inconnu')
+                
+                print(f"   🔍 Recherche ID: {produit_id} - {produit_nom}")
+                
+                # Chercher le produit dans Sheets (colonne A = ID)
+                cell = worksheet.find(produit_id, in_column=1)
+                if cell:
+                    row_num = cell.row
+                    current_row = worksheet.row_values(row_num)
+                    stock_actuel = int(current_row[3]) if len(current_row) > 3 else 0
+                    nouveau_stock = stock_actuel - quantite_vendue
+                    
+                    print(f"   📊 Stock: {stock_actuel} → {nouveau_stock}")
+                    
+                    # Mettre à jour la cellule du stock (colonne D = index 4)
+                    worksheet.update_cell(row_num, 4, nouveau_stock)
+                    print(f"   ✅ Stock Sheets mis à jour pour {produit_nom}")
+                else:
+                    print(f"   ❌ Produit ID {produit_id} non trouvé dans Sheets!")
+                    print(f"   📋 IDs disponibles: {worksheet.col_values(1)}")
+                    
+        except Exception as e:
+            print(f"   ❌ ERREUR mise à jour stock Sheets: {e}")
+            import traceback
+            traceback.print_exc()
         
-        print(f"✅ Vente enregistrée avec ID: {new_id}")
-        
-        return jsonify({'success': True, 'vente_id': new_id})
+        return jsonify({'success': True, 'vente_id': vente_id})
         
     except Exception as e:
-        print(f"❌ Erreur: {e}")
+        print(f"❌ ERREUR: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/facture/<int:vente_id>/<string:type>')
@@ -991,19 +1037,21 @@ def get_structures_disponibles():
 @login_required
 def recu(vente_id, type):
     from datetime import datetime
+    import json
     
     structure_id = session.get('structure_id')
     
     if not structure_id:
         return "Structure non trouvée", 404
     
-    # Récupérer les infos de la structure depuis Google Sheets
+    # Récupérer les infos de la structure
     structures = sheets_helper.get_all_records('structures', use_prefix=False)
     structure_info = next((s for s in structures if str(s.get('ID')) == str(structure_id)), {})
     
     structure_nom = structure_info.get('nom', 'Medilogic-GHP')
     structure_adresse = structure_info.get('adresse', '')
     structure_telephone = structure_info.get('telephone', '')
+    structure_email = structure_info.get('email', '')  # 🔥 AJOUT
     structure_logo = structure_info.get('logo_url', '')
     
     articles = []
@@ -1015,24 +1063,31 @@ def recu(vente_id, type):
     mode_paiement = 'Espèces'
     type_assurance = 'non_assure'
     numero_assure = ''
-    patient_id = None
     
-    # 🔥 UNIQUEMENT depuis NEON pour les deux types
+    # 🔥 CORRECTION : Accepter 'pharma' et 'pharmacie'
+    type_bd = 'pharmacie' if type == 'pharma' else type
+    
+    print(f"🔍 Recherche vente {vente_id} (type reçu: {type}, type BD: {type_bd})")
+    
+    # 🔥 Lire depuis NEON avec le bon type
     vente = db.execute_query("""
         SELECT v.*, p.nom, p.prenom, p.type_assurance, p.numero_assure
         FROM ventes v
-        JOIN patients p ON v.patient_id = p.id
+        LEFT JOIN patients p ON v.patient_id = p.id
         WHERE v.id = %s AND v.structure_id = %s AND v.type = %s
-    """, (vente_id, structure_id, type))
+    """, (vente_id, structure_id, type_bd))
     
     if not vente or len(vente) == 0:
-        return f"Vente {vente_id} non trouvée", 404
+        return f"Vente {vente_id} non trouvée (type: {type_bd})", 404
     
-    # Extraire les données
     if isinstance(vente[0], dict):
         v = vente[0]
-        patient_nom = f"{v.get('nom', '')} {v.get('prenom', '')}".strip()
-        patient_id = v.get('patient_id')
+        patient_nom = v.get('patient_nom', '')
+        if not patient_nom:
+            patient_nom = f"{v.get('nom', '')} {v.get('prenom', '')}".strip()
+        if not patient_nom:
+            patient_nom = 'Patient'
+        
         mode_paiement = v.get('mode_paiement', 'Espèces')
         taux_assurance = float(v.get('taux_assurance', 0))
         prise_en_charge = float(v.get('prise_en_charge', 0))
@@ -1041,64 +1096,28 @@ def recu(vente_id, type):
         type_assurance = v.get('type_assurance', 'non_assure')
         numero_assure = v.get('numero_assure', '')
         
-        # Récupérer les articles selon le type
-        if type == 'actes':
-            actes_json = v.get('actes', [])
-            if isinstance(actes_json, str):
-                actes_json = json.loads(actes_json)
-            for a in actes_json:
-                articles.append({
-                    'nom': a.get('nom', 'Acte'),
-                    'quantite': int(a.get('quantite', 1)),
-                    'prix_unitaire': float(a.get('prix', 0)),
-                    'total': float(a.get('total', 0))
-                })
-        else:  # pharmacie
-            produits_json = v.get('produits', [])
-            if isinstance(produits_json, str):
-                produits_json = json.loads(produits_json)
-            for p in produits_json:
+        # Récupérer les produits
+        if type_bd == 'pharmacie' or type_bd == 'pharma':
+            produits_data = v.get('produits', [])
+            if isinstance(produits_data, str):
+                produits_data = json.loads(produits_data)
+            for p in produits_data:
                 articles.append({
                     'nom': p.get('nom', 'Produit'),
                     'quantite': int(p.get('quantite', 1)),
                     'prix_unitaire': float(p.get('prix_reel', p.get('prix', 0))),
                     'total': float(p.get('total', 0))
                 })
-    else:
-        # Format tuple
-        v = vente[0]
-        patient_nom = f"{v[12]} {v[13]}".strip() if len(v) > 13 else 'Patient'
-        patient_id = v[1] if len(v) > 1 else None
-        mode_paiement = v[7] if len(v) > 7 else 'Espèces'
-        taux_assurance = float(v[10]) if len(v) > 10 else 0
-        prise_en_charge = float(v[5]) if len(v) > 5 else 0
-        net_a_payer = float(v[6]) if len(v) > 6 else 0
-        sous_total = float(v[4]) if len(v) > 4 else 0
-        type_assurance = v[14] if len(v) > 14 else 'non_assure'
-        numero_assure = v[15] if len(v) > 15 else ''
-        
-        # Récupérer les articles
-        if type == 'actes':
-            actes_json = v[11] if len(v) > 11 else []
-            if isinstance(actes_json, str):
-                actes_json = json.loads(actes_json)
-            for a in actes_json:
+        else:  # actes
+            actes_data = v.get('actes', [])
+            if isinstance(actes_data, str):
+                actes_data = json.loads(actes_data)
+            for a in actes_data:
                 articles.append({
                     'nom': a.get('nom', 'Acte'),
                     'quantite': int(a.get('quantite', 1)),
                     'prix_unitaire': float(a.get('prix', 0)),
                     'total': float(a.get('total', 0))
-                })
-        else:
-            produits_json = v[8] if len(v) > 8 else []
-            if isinstance(produits_json, str):
-                produits_json = json.loads(produits_json)
-            for p in produits_json:
-                articles.append({
-                    'nom': p.get('nom', 'Produit'),
-                    'quantite': int(p.get('quantite', 1)),
-                    'prix_unitaire': float(p.get('prix_reel', p.get('prix', 0))),
-                    'total': float(p.get('total', 0))
                 })
     
     # Gestion des assurances
@@ -1110,14 +1129,9 @@ def recu(vente_id, type):
     elif type_assurance == 'non_assure':
         assurance_text = 'Non assuré'
     
-    print(f"=== REÇU {vente_id} ({type}) ===")
+    print(f"=== REÇU {vente_id} ({type_bd}) ===")
     print(f"Patient: {patient_nom}")
     print(f"Articles: {len(articles)}")
-    for a in articles:
-        print(f"  - {a['nom']}: {a['quantite']} x {a['prix_unitaire']} = {a['total']}")
-    print(f"Sous-total: {sous_total}")
-    print(f"Prise en charge: {prise_en_charge}")
-    print(f"Net à payer: {net_a_payer}")
     
     return render_template('recu_client.html',
                          vente_id=vente_id,
@@ -1133,10 +1147,10 @@ def recu(vente_id, type):
                          structure_nom=structure_nom,
                          structure_adresse=structure_adresse,
                          structure_telephone=structure_telephone,
+                         structure_email=structure_email,  # 🔥 AJOUT
                          date_actuelle=datetime.now().strftime('%d/%m/%Y %H:%M'),
                          structure_logo=structure_logo,
                          nom_caissier=session.get('user_name', ''))
-
 @app.route('/historique_ventes')
 @login_required
 def historique_ventes():
@@ -2852,20 +2866,6 @@ def api_update_patient(patient_id):
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/api/produits')
-@login_required
-def api_get_produits():
-    structure_id = session.get('structure_id')
-    
-    produits = db.execute_query("""
-        SELECT id, code, nom, prix_vente, quantite_stock, seuil_alerte, 
-               unite, categorie, fournisseur, peremption
-        FROM produits 
-        WHERE structure_id = %s AND (actif IS NULL OR actif = TRUE)
-        ORDER BY nom
-    """, (structure_id,))
-    
-    return jsonify(produits)
 @app.route('/api/produits', methods=['POST'])
 @login_required
 def api_add_produit():
@@ -2919,51 +2919,67 @@ def api_update_stock(produit_id):
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/api/produits')
+@login_required
+def api_get_produits():
+    """Récupérer les produits depuis Google Sheets"""
+    structure_id = session.get('structure_id')
+    
+    # 🔥 Lire depuis Sheets
+    produits = sheets_helper.get_all_records('produits')
+    
+    # Filtrer par structure
+    produits_liste = []
+    for p in produits:
+        if str(p.get('structure_id')) == str(structure_id):
+            produits_liste.append({
+                'id': p.get('ID'),
+                'nom': p.get('nom', ''),
+                'prix_vente': float(p.get('prix_vente', 0)),
+                'quantite_stock': int(p.get('quantite_stock', 0)),
+                'seuil_alerte': int(p.get('seuil_alerte', 10)),
+                'unite': p.get('unite', 'unité')
+            })
+    
+    return jsonify(produits_liste)
+
+# ========== GESTION PRODUITS (Google Sheets) ==========
+
 @app.route('/api/admin/produits', methods=['POST'])
 @login_required
 def api_admin_add_produit():
+    """Ajouter un produit dans Google Sheets"""
     try:
         data = request.json
         structure_id = session.get('structure_id')
         
-        result = db.execute_query("""
-            INSERT INTO produits (structure_id, code, nom, prix_vente, quantite_stock, seuil_alerte)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            RETURNING id
-        """, (
-            structure_id,
-            data.get('code'),
+        print(f"➕ Ajout produit - Données: {data}")
+        
+        # Récupérer les produits existants depuis Sheets
+        produits = sheets_helper.get_all_records('produits')
+        new_id = get_next_id(produits, 'ID')
+        
+        # Ajouter le nouveau produit
+        new_produit = [
+            new_id,
             data.get('nom'),
-            data.get('prix_vente'),
-            data.get('quantite_stock', 0),
-            data.get('seuil_alerte', 10)  # ← AJOUTER CETTE LIGNE
-
-        ))
+            float(data.get('prix_vente', 0)),
+            int(data.get('quantite_stock', 0)),
+            int(data.get('seuil_alerte', 10)),
+            data.get('unite', 'unité'),
+            structure_id
+        ]
         
-        return jsonify({'success': True, 'id': result[0]['id']})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/api/admin/produits/<int:produit_id>', methods=['DELETE'])
-@login_required
-def api_admin_delete_produit(produit_id):
-    try:
-        structure_id = session.get('structure_id')
+        sheets_helper.add_record('produits', new_produit)
         
-        print(f"🗑️ Désactivation produit ID: {produit_id}")
-        
-        # 🔥 Désactiver le produit au lieu de le supprimer
-        db.execute_query("""
-            UPDATE produits 
-            SET actif = FALSE 
-            WHERE id = %s AND structure_id = %s
-        """, (produit_id, structure_id))
-        
-        return jsonify({'success': True, 'message': 'Produit désactivé'})
+        return jsonify({'success': True, 'id': new_id})
         
     except Exception as e:
         print(f"❌ Erreur: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
+
 
 @app.route('/api/admin/produits/<int:produit_id>', methods=['PUT'])
 @login_required
@@ -2972,26 +2988,72 @@ def api_admin_update_produit(produit_id):
         data = request.json
         structure_id = session.get('structure_id')
         
-        db.execute_query("""
-            UPDATE produits 
-            SET code = %s, nom = %s, prix_vente = %s, quantite_stock = %s,seuil_alerte = %s
-            WHERE id = %s AND structure_id = %s
-        """, (
-            data.get('code'),
-            data.get('nom'),
-            data.get('prix_vente'),
-            data.get('quantite_stock', 0),
-            data.get('seuil_alerte'),  # ← Vérifie que c'est bien présent
-            produit_id,
-            structure_id
-        ))
+        print(f"✏️ Modification produit ID: {produit_id}")
+        print(f"   Données: {data}")
+        print(f"   Structure ID: {structure_id}")
+        
+        # 🔥 Utiliser le bon nom de feuille
+        sheet_name = f"struct_{structure_id}_produits"
+        print(f"   Feuille: {sheet_name}")
+        
+        worksheet = sheets_helper.spreadsheet.worksheet(sheet_name)
+        
+        # Trouver le produit
+        cell = worksheet.find(str(produit_id), in_column=1)
+        if not cell:
+            return jsonify({'success': False, 'error': 'Produit non trouvé'}), 404
+        
+        row_num = cell.row
+        current_row = worksheet.row_values(row_num)
+        
+        # Mettre à jour les colonnes
+        # A=ID, B=nom, C=prix_vente, D=quantite_stock, E=seuil_alerte, F=unite, G=structure_id
+        current_row[1] = data.get('nom')
+        current_row[2] = str(float(data.get('prix_vente', 0)))
+        current_row[3] = str(int(data.get('quantite_stock', 0)))
+        current_row[4] = str(int(data.get('seuil_alerte', 10)))
+        current_row[5] = data.get('unite', 'unité')
+        current_row[6] = str(structure_id)
+        
+        worksheet.update(range_name=f'A{row_num}:G{row_num}', values=[current_row])
+        
+        print(f"   ✅ Produit {produit_id} modifié avec succès")
         
         return jsonify({'success': True})
+        
     except Exception as e:
+        print(f"❌ Erreur: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/api/admin/produits/<int:produit_id>', methods=['DELETE'])
+@login_required
+def api_admin_delete_produit(produit_id):
+    """Supprimer un produit de Google Sheets"""
+    try:
+        structure_id = session.get('structure_id')
+        
+        print(f"🗑️ Suppression produit ID: {produit_id}")
+        
+        worksheet = sheets_helper.spreadsheet.worksheet("produits")
+        
+        # Trouver le produit
+        cell = worksheet.find(str(produit_id), in_column=1)
+        if not cell:
+            return jsonify({'success': False, 'error': 'Produit non trouvé'}), 404
+        
+        # Supprimer la ligne
+        worksheet.delete_rows(cell.row)
+        
+        return jsonify({'success': True, 'message': 'Produit supprimé'})
+        
+    except Exception as e:
+        print(f"❌ Erreur: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
-# ========== ROUTES API POUR LA PHARMACIE (SANS HISTORIQUE) ==========
 
 @app.route('/api/produits/<int:id>/approvisionner', methods=['POST'])
 @login_required
@@ -3002,85 +3064,94 @@ def api_approvisionner_produit(id):
         structure_id = session.get('structure_id')
         quantite = data.get('quantite', 0)
         
+        print(f"📦 Approvisionnement produit ID: {id}")
+        print(f"   Quantité: {quantite}")
+        print(f"   Structure ID: {structure_id}")
+        
         if not quantite or quantite <= 0:
             return jsonify({'success': False, 'error': 'Quantité invalide'}), 400
         
-        # Vérifier que le produit appartient à la structure
-        produit = db.execute_query("""
-            SELECT id, quantite_stock FROM produits 
-            WHERE id = %s AND structure_id = %s
-        """, (id, structure_id))
+        # 🔥 Utiliser le bon nom de feuille
+        sheet_name = f"struct_{structure_id}_produits"
+        print(f"   Feuille: {sheet_name}")
         
-        if not produit or len(produit) == 0:
+        worksheet = sheets_helper.spreadsheet.worksheet(sheet_name)
+        
+        # Trouver le produit
+        cell = worksheet.find(str(id), in_column=1)
+        if not cell:
             return jsonify({'success': False, 'error': 'Produit non trouvé'}), 404
         
-        # Mettre à jour le stock
-        result = db.execute_query("""
-            UPDATE produits 
-            SET quantite_stock = quantite_stock + %s
-            WHERE id = %s AND structure_id = %s
-            RETURNING id, quantite_stock
-        """, (quantite, id, structure_id))
+        row_num = cell.row
+        current_row = worksheet.row_values(row_num)
         
-        if result and len(result) > 0:
-            nouveau_stock = result[0].get('quantite_stock') if isinstance(result[0], dict) else result[0][1]
-            return jsonify({'success': True, 'message': f'{quantite} unités ajoutées', 'stock': nouveau_stock})
-        else:
-            return jsonify({'success': False, 'error': 'Erreur lors de la mise à jour'}), 500
+        stock_actuel = int(current_row[3]) if len(current_row) > 3 else 0
+        nouveau_stock = stock_actuel + quantite
+        
+        worksheet.update_cell(row_num, 4, nouveau_stock)
+        
+        print(f"   ✅ Stock: {stock_actuel} → {nouveau_stock}")
+        
+        return jsonify({'success': True, 'message': f'{quantite} unités ajoutées', 'stock': nouveau_stock})
         
     except Exception as e:
-        print(f"❌ Erreur approvisionnement: {e}")
+        print(f"❌ Erreur: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
-
 
 @app.route('/api/produits/<int:id>/stock', methods=['PUT'])
 @login_required
 def api_modifier_stock(id):
-    """Modifier le stock d'un produit (ajouter ou retirer)"""
+    """Modifier le stock d'un produit (ajouter ou retirer) dans Google Sheets"""
     try:
         data = request.json
         structure_id = session.get('structure_id')
         quantite = data.get('quantite', 0)
         operation = data.get('operation', 'ajouter')
         
+        print(f"📦 Modification stock produit ID: {id}")
+        print(f"   Quantité: {quantite}, Opération: {operation}")
+        
         if not quantite or quantite <= 0:
             return jsonify({'success': False, 'error': 'Quantité invalide'}), 400
         
-        # Vérifier que le produit appartient à la structure
-        produit = db.execute_query("""
-            SELECT id, quantite_stock FROM produits 
-            WHERE id = %s AND structure_id = %s
-        """, (id, structure_id))
+        # 🔥 Lire depuis Google Sheets
+        worksheet = sheets_helper.spreadsheet.worksheet("produits")
         
-        if not produit or len(produit) == 0:
+        # Trouver le produit par ID (colonne A)
+        cell = worksheet.find(str(id), in_column=1)
+        if not cell:
             return jsonify({'success': False, 'error': 'Produit non trouvé'}), 404
         
-        stock_actuel = produit[0].get('quantite_stock') if isinstance(produit[0], dict) else produit[0][1]
+        row_num = cell.row
+        current_row = worksheet.row_values(row_num)
+        
+        # Colonnes: A=ID, B=nom, C=prix_vente, D=quantite_stock, E=seuil_alerte, F=unite, G=structure_id
+        stock_actuel = int(current_row[3]) if len(current_row) > 3 else 0
+        nom_produit = current_row[1] if len(current_row) > 1 else 'Produit'
+        
+        print(f"   Stock actuel de {nom_produit}: {stock_actuel}")
         
         if operation == 'retirer':
             if quantite > stock_actuel:
-                return jsonify({'success': False, 'error': 'Stock insuffisant'}), 400
+                return jsonify({'success': False, 'error': f'Stock insuffisant. Stock: {stock_actuel}'}), 400
             nouvelle_quantite = stock_actuel - quantite
         else:
             nouvelle_quantite = stock_actuel + quantite
         
-        # Mettre à jour le stock
-        result = db.execute_query("""
-            UPDATE produits 
-            SET quantite_stock = %s
-            WHERE id = %s AND structure_id = %s
-            RETURNING id
-        """, (nouvelle_quantite, id, structure_id))
+        # Mettre à jour dans Sheets (colonne D = quantite_stock, index 4)
+        worksheet.update_cell(row_num, 4, nouvelle_quantite)
         
-        if result and len(result) > 0:
-            return jsonify({'success': True, 'stock': nouvelle_quantite})
-        else:
-            return jsonify({'success': False, 'error': 'Erreur lors de la mise à jour'}), 500
+        print(f"   ✅ Nouveau stock: {nouvelle_quantite}")
+        
+        return jsonify({'success': True, 'stock': nouvelle_quantite})
         
     except Exception as e:
         print(f"❌ Erreur modification stock: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
-
 
 @app.route('/api/ventes/pharma', methods=['POST'])
 @login_required
@@ -3092,7 +3163,6 @@ def api_vente_pharma():
         data = request.json
         structure_id = session.get('structure_id')
         
-        # 🔥 Récupération du vendeur
         vendeur = session.get('user_name')
         if not vendeur:
             vendeur = 'System'
@@ -3101,6 +3171,7 @@ def api_vente_pharma():
         print("VENTE PHARMACIE")
         print(f"Patient: {data.get('patient_nom')}")
         print(f"Vendeur: {vendeur}")
+        print(f"Produits: {data.get('produits')}")
         print("=" * 60)
         
         if not structure_id:
@@ -3110,20 +3181,13 @@ def api_vente_pharma():
         if not patient_id:
             return jsonify({'success': False, 'error': 'ID patient manquant'}), 400
         
+        # ✅ Enregistrer la vente dans Neon
         result = db.execute_query("""
             INSERT INTO ventes (
-                patient_id, 
-                patient_nom, 
-                structure_id, 
-                type, 
-                sous_total, 
-                prise_en_charge, 
-                net_a_payer, 
-                mode_paiement, 
-                taux_assurance, 
-                date_vente, 
-                produits,
-                created_by_nom
+                patient_id, patient_nom, structure_id, type, 
+                sous_total, prise_en_charge, net_a_payer, 
+                mode_paiement, taux_assurance, date_vente, 
+                produits, created_by_nom
             )
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s::jsonb, %s)
             RETURNING id
@@ -3138,20 +3202,51 @@ def api_vente_pharma():
             data.get('mode_paiement', 'especes'),
             float(data.get('taux_assurance', 0)),
             json.dumps(data.get('produits', []), ensure_ascii=False),
-            vendeur  # ← ICI : le nom du vendeur
+            vendeur
         ))
         
         if result and len(result) > 0:
             vente_id = result[0]['id']
-            print(f"✅ Vente pharmacie ID: {vente_id} par {vendeur}")
+            print(f"✅ Vente pharmacie ID: {vente_id}")
             
-            # Mettre a jour les stocks
-            for produit in data.get('produits', []):
-                db.execute_query("""
-                    UPDATE produits 
-                    SET quantite_stock = quantite_stock - %s
-                    WHERE id = %s AND structure_id = %s
-                """, (int(produit.get('quantite', 0)), produit.get('id'), structure_id))
+            # ❌ SUPPRIME L'ANCIENNE MISE À JOUR DU STOCK ICI
+            # ⚠️ NE GARDE QUE LA MISE À JOUR DANS SHEETS
+            
+            # ✅ MISE À JOUR DU STOCK DANS GOOGLE SHEETS
+            try:
+                sheet_name = f"struct_{structure_id}_produits"
+                print(f"   📂 Feuille: {sheet_name}")
+                
+                worksheet = sheets_helper.spreadsheet.worksheet(sheet_name)
+                
+                for produit in data.get('produits', []):
+                    produit_id = str(produit.get('id'))
+                    quantite_vendue = int(produit.get('quantite', 0))
+                    produit_nom = produit.get('nom', 'Inconnu')
+                    
+                    print(f"   🔍 Recherche du produit ID: {produit_id} - {produit_nom}")
+                    
+                    # Chercher le produit dans Sheets (colonne A = ID)
+                    cell = worksheet.find(produit_id, in_column=1)
+                    if cell:
+                        row_num = cell.row
+                        current_row = worksheet.row_values(row_num)
+                        stock_actuel = int(current_row[3]) if len(current_row) > 3 else 0
+                        nouveau_stock = stock_actuel - quantite_vendue
+                        
+                        print(f"   📊 Stock: {stock_actuel} → {nouveau_stock}")
+                        
+                        # Mettre à jour la cellule du stock (colonne D = index 4)
+                        worksheet.update_cell(row_num, 4, nouveau_stock)
+                        print(f"   ✅ Stock Sheets mis à jour pour {produit_nom}")
+                    else:
+                        print(f"   ❌ Produit ID {produit_id} non trouvé dans Sheets!")
+                        print(f"   📋 IDs disponibles: {worksheet.col_values(1)}")
+                        
+            except Exception as e:
+                print(f"   ❌ ERREUR mise à jour stock Sheets: {e}")
+                import traceback
+                traceback.print_exc()
             
             return jsonify({'success': True, 'vente_id': vente_id})
         else:
@@ -3166,29 +3261,36 @@ def api_vente_pharma():
 @app.route('/api/produits/<int:id>/stock', methods=['GET'])
 @login_required
 def api_get_stock_produit(id):
-    """Récupérer le stock d'un produit"""
+    """Récupérer le stock d'un produit depuis Google Sheets"""
     try:
         structure_id = session.get('structure_id')
         
-        result = db.execute_query("""
-            SELECT id, nom, quantite_stock, seuil_alerte 
-            FROM produits 
-            WHERE id = %s AND structure_id = %s
-        """, (id, structure_id))
+        # 🔥 Utiliser le bon nom de feuille
+        sheet_name = f"struct_{structure_id}_produits"
+        worksheet = sheets_helper.spreadsheet.worksheet(sheet_name)
         
-        if not result or len(result) == 0:
+        # Trouver le produit par ID (colonne A)
+        cell = worksheet.find(str(id), in_column=1)
+        if not cell:
             return jsonify({'success': False, 'error': 'Produit non trouvé'}), 404
         
-        produit = result[0] if isinstance(result[0], dict) else {
-            'id': result[0][0],
-            'nom': result[0][1],
-            'quantite_stock': result[0][2],
-            'seuil_alerte': result[0][3]
+        row_num = cell.row
+        current_row = worksheet.row_values(row_num)
+        
+        # Colonnes: A=ID, B=nom, C=prix_vente, D=quantite_stock, E=seuil_alerte, F=unite, G=structure_id
+        produit = {
+            'id': int(current_row[0]) if len(current_row) > 0 else None,
+            'nom': current_row[1] if len(current_row) > 1 else '',
+            'quantite_stock': int(current_row[3]) if len(current_row) > 3 else 0,
+            'seuil_alerte': int(current_row[4]) if len(current_row) > 4 else 10
         }
         
         return jsonify({'success': True, 'stock': produit})
         
     except Exception as e:
+        print(f"❌ Erreur: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/patients/count')

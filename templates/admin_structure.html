@@ -169,45 +169,43 @@
                 </div>
             </div>
 
-            <!-- ========== ONGLET PRODUITS & STOCKS ========== -->
-            <div class="tab-pane fade" id="gestionProduits" role="tabpanel">
-                <div class="card">
-                    <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
-                        <h5><i class="fas fa-boxes"></i> Gestion des produits & stocks</h5>
-                        <button class="btn btn-light btn-sm" onclick="showAddProduitModal()">
-                            <i class="fas fa-plus"></i> Nouveau produit
-                        </button>
-                    </div>
-                    <div class="card-body">
-                        <div class="mb-3">
-                            <div class="input-group">
-                                <span class="input-group-text"><i class="fas fa-search"></i></span>
-                                <input type="text" id="searchProduitAdmin" class="form-control" placeholder="Rechercher un produit..." onkeyup="filterProduitsAdmin()">
-                                <button class="btn btn-outline-secondary" onclick="clearSearchProduitAdmin()">✖</button>
-                            </div>
-                        </div>
-                        <div class="table-responsive">
-                            <table class="table table-bordered table-hover">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th>Code</th>
-                                        <th>Nom</th>
-                                        <th>Prix vente</th>
-                                        <th>Prix achat</th>
-                                        <th>Stock</th>
-                                        <th>Seuil</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="produitsAdminList">
-                                    <tr><td colspan="7" class="text-center">Chargement...</td></tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
+<!-- ========== ONGLET PRODUITS & STOCKS ========== -->
+<div class="tab-pane fade" id="gestionProduits" role="tabpanel">
+    <div class="card">
+        <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+            <h5><i class="fas fa-boxes"></i> Gestion des produits & stocks</h5>
+            <button class="btn btn-light btn-sm" onclick="showAddProduitModal()">
+                <i class="fas fa-plus"></i> Nouveau produit
+            </button>
+        </div>
+        <div class="card-body">
+            <div class="mb-3">
+                <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                    <input type="text" id="searchProduitAdmin" class="form-control" placeholder="Rechercher un produit..." onkeyup="filterProduitsAdmin()">
+                    <button class="btn btn-outline-secondary" onclick="clearSearchProduitAdmin()">✖</button>
                 </div>
             </div>
-
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Nom</th>
+                            <th>Prix vente</th>
+                            <th>Stock</th>
+                            <th>Seuil</th>
+                            <th>Unité</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="produitsAdminList">
+                        <tr><td colspan="6" class="text-center">Chargement...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
             <!-- ========== ONGLET MA STRUCTURE ========== -->
             <div class="tab-pane fade" id="structure" role="tabpanel">
                 <div class="card">
@@ -345,46 +343,36 @@
             <div class="modal-body">
                 <form id="produitForm">
                     <input type="hidden" id="produitId">
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Code</label>
-                            <input type="text" class="form-control" id="produitCode">
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Nom</label>
-                            <input type="text" class="form-control" id="produitNom" required>
-                        </div>
+                    <div class="mb-3">
+                        <label class="form-label">Nom *</label>
+                        <input type="text" class="form-control" id="produitNom" required>
                     </div>
                     <div class="row">
                         <div class="col-md-6 mb-3">
-                            <label class="form-label">Prix vente (FCFA)</label>
+                            <label class="form-label">Prix vente (FCFA) *</label>
                             <input type="number" class="form-control" id="produitPrixVente" required>
                         </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Prix achat (FCFA)</label>
-                            <input type="number" class="form-control" id="produitPrixAchat">
-                        </div>
-                    </div>
-                    <div class="row">
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Stock initial</label>
                             <input type="number" class="form-control" id="produitStock" value="0">
                         </div>
+                    </div>
+                    <div class="row">
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Seuil d'alerte</label>
                             <input type="number" class="form-control" id="produitSeuil" value="10">
                         </div>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Unité</label>
-                        <select class="form-control" id="produitUnite">
-                            <option value="unité">Unité</option>
-                            <option value="comprimé">Comprimé</option>
-                            <option value="gélule">Gélule</option>
-                            <option value="sachet">Sachet</option>
-                            <option value="boîte">Boîte</option>
-                            <option value="flacon">Flacon</option>
-                        </select>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Unité</label>
+                            <select class="form-control" id="produitUnite">
+                                <option value="unité">Unité</option>
+                                <option value="comprimé">Comprimé</option>
+                                <option value="gélule">Gélule</option>
+                                <option value="sachet">Sachet</option>
+                                <option value="boîte">Boîte</option>
+                                <option value="flacon">Flacon</option>
+                            </select>
+                        </div>
                     </div>
                 </form>
             </div>
@@ -451,7 +439,7 @@ function chargerProduitsAdmin() {
         })
         .catch(error => {
             console.error('Erreur:', error);
-            document.getElementById('produitsAdminList').innerHTML = '<tr><td colspan="7" class="text-center text-danger">Erreur de chargement</td></tr>';
+            document.getElementById('produitsAdminList').innerHTML = '<tr><td colspan="6" class="text-center text-danger">Erreur de chargement</td></tr>';
         });
 }
 
@@ -460,7 +448,7 @@ function afficherProduitsAdmin(produits) {
     tbody.innerHTML = '';
     
     if (!produits || produits.length === 0) { 
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center">Aucun produit</td></tr>'; 
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center">Aucun produit</td></tr>'; 
         return; 
     }
     
@@ -468,12 +456,11 @@ function afficherProduitsAdmin(produits) {
         const stockClass = p.quantite_stock <= p.seuil_alerte ? 'text-danger fw-bold' : '';
         tbody.innerHTML += `
             <tr>
-                <td>${p.code || '-'}</td>
                 <td><strong>${p.nom}</strong></td>
                 <td>${parseInt(p.prix_vente).toLocaleString()} F</td>
-                <td>${p.prix_achat ? parseInt(p.prix_achat).toLocaleString() + ' F' : '-'}</td>
                 <td class="${stockClass}">${p.quantite_stock}</td>
                 <td>${p.seuil_alerte}</td>
+                <td>${p.unite || 'unité'}</td>
                 <td>
                     <button class="btn btn-sm btn-info" onclick="approvisionner(${p.id}, '${p.nom.replace(/'/g, "\\'")}')" title="Approvisionner">
                         <i class="fas fa-truck"></i>
@@ -492,10 +479,7 @@ function afficherProduitsAdmin(produits) {
 
 function filterProduitsAdmin() {
     const search = document.getElementById('searchProduitAdmin').value.toLowerCase();
-    const filtered = tousLesProduits.filter(p => 
-        p.nom.toLowerCase().includes(search) || 
-        (p.code && p.code.toLowerCase().includes(search))
-    );
+    const filtered = tousLesProduits.filter(p => p.nom.toLowerCase().includes(search));
     afficherProduitsAdmin(filtered);
 }
 
@@ -510,6 +494,7 @@ function showAddProduitModal() {
     document.getElementById('produitForm').reset();
     document.getElementById('produitStock').value = '0';
     document.getElementById('produitSeuil').value = '10';
+    document.getElementById('produitUnite').value = 'unité';
     new bootstrap.Modal(document.getElementById('produitModal')).show();
 }
 
@@ -518,10 +503,8 @@ function modifierProduit(id) {
     if (!p) return;
     document.getElementById('produitModalTitle').innerText = 'Modifier le produit';
     document.getElementById('produitId').value = p.id;
-    document.getElementById('produitCode').value = p.code || '';
     document.getElementById('produitNom').value = p.nom;
     document.getElementById('produitPrixVente').value = p.prix_vente;
-    document.getElementById('produitPrixAchat').value = p.prix_achat || '';
     document.getElementById('produitStock').value = p.quantite_stock;
     document.getElementById('produitSeuil').value = p.seuil_alerte;
     document.getElementById('produitUnite').value = p.unite || 'unité';
@@ -531,10 +514,8 @@ function modifierProduit(id) {
 function saveProduit() {
     const id = document.getElementById('produitId').value;
     const produit = {
-        code: document.getElementById('produitCode').value,
         nom: document.getElementById('produitNom').value,
-        prix_vente: parseInt(document.getElementById('produitPrixVente').value),
-        prix_achat: parseInt(document.getElementById('produitPrixAchat').value) || 0,
+        prix_vente: parseFloat(document.getElementById('produitPrixVente').value),
         quantite_stock: parseInt(document.getElementById('produitStock').value),
         seuil_alerte: parseInt(document.getElementById('produitSeuil').value),
         unite: document.getElementById('produitUnite').value
@@ -604,13 +585,13 @@ function validerApprovisionnement() {
 }
 
 function supprimerProduit(id) {
-    if (confirm('Supprimer ce produit ?')) {
+    if (confirm('Supprimer définitivement ce produit ?')) {
         fetch(`/api/admin/produits/${id}`, { method: 'DELETE' })
             .then(r => r.json())
             .then(data => {
                 if (data.success) {
                     alert('Produit supprimé');
-                    chargerProduitsAdmin();  // ← Recharge la liste
+                    chargerProduitsAdmin();
                     if (typeof chargerProduits === 'function') chargerProduits();
                 } else {
                     alert('Erreur: ' + data.error);
