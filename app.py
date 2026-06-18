@@ -3541,15 +3541,18 @@ def api_add_acte_vente():
 @app.route('/api/ventes/all')
 @login_required
 def api_get_all_ventes():
+    """Récupérer toutes les ventes (actes + pharmacie) depuis Neon (hors annulées)"""
     try:
         structure_id = session.get('structure_id')
         
+        # 🔥 Récupérer UNIQUEMENT les ventes non annulées
         ventes = db.execute_query("""
             SELECT 
                 id, patient_nom, type, net_a_payer, taux_assurance, 
                 date_vente, actes, produits, created_by_nom, statut
             FROM ventes 
-            WHERE structure_id = %s
+            WHERE structure_id = %s 
+            AND (statut IS NULL OR statut != 'annulee')
             ORDER BY date_vente DESC
         """, (structure_id,))
         
@@ -3564,8 +3567,11 @@ def api_get_all_ventes():
                 if v.get('type') == 'actes' and v.get('actes'):
                     actes_data = v.get('actes')
                     if isinstance(actes_data, str):
-                        actes_data = json.loads(actes_data)
-                    if actes_data:
+                        try:
+                            actes_data = json.loads(actes_data)
+                        except:
+                            actes_data = []
+                    if actes_data and len(actes_data) > 0:
                         articles = []
                         for a in actes_data:
                             nom = a.get('nom', 'Acte')
@@ -3576,7 +3582,7 @@ def api_get_all_ventes():
                                 articles.append(nom)
                         detail = ", ".join(articles)
                 
-                # 🔥 Pour la pharmacie - accepter 'pharma' ET 'pharmacie'
+                # Pour la pharmacie (accepter 'pharma' ET 'pharmacie')
                 elif v.get('type') in ['pharma', 'pharmacie'] and v.get('produits'):
                     produits_data = v.get('produits')
                     if isinstance(produits_data, str):
@@ -3584,7 +3590,6 @@ def api_get_all_ventes():
                             produits_data = json.loads(produits_data)
                         except:
                             produits_data = []
-                    
                     if produits_data and len(produits_data) > 0:
                         articles = []
                         for p in produits_data:
@@ -3598,6 +3603,7 @@ def api_get_all_ventes():
                     else:
                         detail = '-'
                 
+                # Ajouter la vente au résultat
                 result.append({
                     'ID': v.get('id'),
                     'patient_nom': v.get('patient_nom', 'Patient'),
@@ -3608,6 +3614,46 @@ def api_get_all_ventes():
                     'detail': detail if detail else '-',
                     'created_by_nom': v.get('created_by_nom', None),
                     'statut': v.get('statut', 'validee')
+                })
+            else:
+                # Format tuple
+                detail = ""
+                vente_type = v[3] if len(v) > 3 else ''
+                
+                # Pour les actes (tuple)
+                if vente_type == 'actes' and len(v) > 6 and v[6]:
+                    actes_data = v[6]
+                    if isinstance(actes_data, str):
+                        try:
+                            actes_data = json.loads(actes_data)
+                        except:
+                            actes_data = []
+                    if actes_data and len(actes_data) > 0:
+                        articles = [f"{a.get('nom', 'Acte')} x{a.get('quantite', 1)}" for a in actes_data]
+                        detail = ", ".join(articles)
+                
+                # Pour la pharmacie (tuple)
+                elif vente_type in ['pharma', 'pharmacie'] and len(v) > 7 and v[7]:
+                    produits_data = v[7]
+                    if isinstance(produits_data, str):
+                        try:
+                            produits_data = json.loads(produits_data)
+                        except:
+                            produits_data = []
+                    if produits_data and len(produits_data) > 0:
+                        articles = [f"{p.get('nom', 'Produit')} x{p.get('quantite', 1)}" for p in produits_data]
+                        detail = ", ".join(articles)
+                
+                result.append({
+                    'ID': v[0],
+                    'patient_nom': v[2] if len(v) > 2 else 'Patient',
+                    'type': vente_type,
+                    'net_a_payer': float(v[6]) if len(v) > 6 else 0,
+                    'taux_assurance': v[9] if len(v) > 9 else 0,
+                    'date': str(v[10]) if len(v) > 10 else '',
+                    'detail': detail if detail else '-',
+                    'created_by_nom': v[13] if len(v) > 13 else None,
+                    'statut': v[16] if len(v) > 16 else 'validee'
                 })
         
         return jsonify(result)
@@ -3678,23 +3724,33 @@ def annuler_vente(vente_id):
             net_a_payer = float(v[6]) if len(v) > 6 else 0
             sous_total = float(v[4]) if len(v) > 4 else 0
         
-        # Pour la pharmacie : restocker
-        if vente_type == 'pharmacie' and produits_data:
+        # 🔥 Pour la pharmacie : restocker dans Google Sheets (pas Neon)
+        if vente_type in ['pharma', 'pharmacie'] and produits_data:
             if isinstance(produits_data, str):
                 produits_data = json.loads(produits_data)
             
-            for produit in produits_data:
-                produit_id = produit.get('id')
-                quantite = int(produit.get('quantite', 0))
+            try:
+                sheet_name = f"struct_{structure_id}_produits"
+                worksheet = sheets_helper.spreadsheet.worksheet(sheet_name)
                 
-                if produit_id and quantite > 0:
-                    db.execute_query("""
-                        UPDATE produits 
-                        SET quantite_stock = quantite_stock + %s,
-                            updated_at = NOW()
-                        WHERE id = %s AND structure_id = %s
-                    """, (quantite, produit_id, structure_id))
-                    print(f"Restocke: {produit.get('nom')} +{quantite}")
+                for produit in produits_data:
+                    produit_id = str(produit.get('id'))
+                    quantite = int(produit.get('quantite', 0))
+                    
+                    if produit_id and quantite > 0:
+                        # Trouver le produit dans Sheets
+                        cell = worksheet.find(produit_id, in_column=1)
+                        if cell:
+                            row_num = cell.row
+                            current_row = worksheet.row_values(row_num)
+                            stock_actuel = int(current_row[3]) if len(current_row) > 3 else 0
+                            nouveau_stock = stock_actuel + quantite
+                            worksheet.update_cell(row_num, 4, nouveau_stock)
+                            print(f"📦 Restocké dans Sheets: {produit.get('nom')} +{quantite} (Stock: {stock_actuel} → {nouveau_stock})")
+                        else:
+                            print(f"⚠️ Produit {produit_id} non trouvé dans Sheets")
+            except Exception as e:
+                print(f"⚠️ Erreur restock Sheets: {e}")
         
         # Enregistrer l'annulation dans l'historique
         db.execute_query("""
@@ -3729,7 +3785,6 @@ def annuler_vente(vente_id):
         """, (motif, vente_id, structure_id))
         
         # METTRE A JOUR LE SOLDE DE CAISSE
-        # Recalculer le solde total (recettes non annulees - depenses)
         db.execute_query("""
             INSERT INTO caisse (structure_id, solde_actuel, date_mise_a_jour)
             VALUES (%s, 
@@ -3741,7 +3796,7 @@ def annuler_vente(vente_id):
                 date_mise_a_jour = NOW()
         """, (structure_id, structure_id, structure_id))
         
-        print(f"Vente {vente_id} ({vente_type}) annulee par {user_name}")
+        print(f"✅ Vente {vente_id} ({vente_type}) annulee par {user_name}")
         
         return jsonify({
             'success': True, 
@@ -3750,7 +3805,7 @@ def annuler_vente(vente_id):
         })
         
     except Exception as e:
-        print(f"Erreur annulation: {e}")
+        print(f"❌ Erreur annulation: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500

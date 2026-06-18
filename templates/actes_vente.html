@@ -163,6 +163,25 @@
     </div>
 </div>
 
+<!-- Modal Récapitulatif -->
+<div class="modal fade" id="recapModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="fas fa-file-invoice"></i> Récapitulatif de la vente</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="recapContent">
+                <!-- Contenu généré par JavaScript -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Modifier</button>
+                <button class="btn btn-success" onclick="confirmerVente()">Confirmer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 let panier = [];
 let patientId = null;
@@ -445,11 +464,16 @@ function finaliserVente() {
         alert('Veuillez sélectionner un patient');
         return;
     }
+
+    // 🔥 AFFICHER LE RÉCAPITULATIF AVANT DE CONTINUER
+    if (!afficherRecapVente()) {
+        return; // L'utilisateur a annulé
+    }
     
     const btn = document.getElementById('finaliserBtn');
     const originalText = btn.innerHTML;
     btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Traitement...';
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Traitement encours...';
     
     // 🔥 Récupérer le taux modifié (ou celui du patient par défaut)
     let tauxUtilise = parseFloat(document.getElementById('tauxVente').value);
@@ -524,6 +548,172 @@ function finaliserVente() {
         btn.innerHTML = originalText;
     });
 }
+
+function afficherRecapVente() {
+    if (panier.length === 0) {
+        alert('Le panier est vide');
+        return false;
+    }
+    
+    if (!patientId || patientId === 'null' || patientId === 'undefined') {
+        alert('Veuillez sélectionner un patient');
+        return false;
+    }
+    
+    // Calcul des montants
+    let sousTotal = panier.reduce((sum, item) => sum + item.total, 0);
+    let tauxUtilise = parseFloat(document.getElementById('tauxVente').value);
+    if (isNaN(tauxUtilise)) {
+        tauxUtilise = patientTaux;
+    }
+    let priseEnCharge = (sousTotal * tauxUtilise) / 100;
+    let netAPayer = sousTotal - priseEnCharge;
+    
+    let modePaiement = document.getElementById('modePaiement').value;
+    let typeDocument = document.getElementById('typeDocument').value;
+    let formatImpression = document.getElementById('formatImpression').value;
+    
+    // Construire le message de récapitulatif
+    let msg = "📋 RÉCAPITULATIF DE LA VENTE\n";
+    msg += "═".repeat(40) + "\n\n";
+    
+    msg += "👤 PATIENT\n";
+    msg += "   Nom: " + patientName + "\n";
+    msg += "   ID: " + patientId + "\n";
+    msg += "   Assurance: " + patientTaux + "%\n\n";
+    
+    msg += "📦 PRODUITS\n";
+    panier.forEach((item, index) => {
+        msg += "   " + (index + 1) + ". " + item.nom + "\n";
+        msg += "      Quantité: " + item.quantite + "\n";
+        msg += "      Prix unitaire: " + item.prix.toLocaleString() + " FCFA\n";
+        msg += "      Total: " + (item.prix * item.quantite).toLocaleString() + " FCFA\n\n";
+    });
+    
+    msg += "─".repeat(40) + "\n";
+    msg += "💰 RÉSUMÉ FINANCIER\n";
+    msg += "   Sous-total: " + sousTotal.toLocaleString() + " FCFA\n";
+    msg += "   Taux assurance: " + tauxUtilise + "%\n";
+    msg += "   Prise en charge: -" + priseEnCharge.toLocaleString() + " FCFA\n";
+    msg += "   " + "═".repeat(30) + "\n";
+    msg += "   NET À PAYER: " + netAPayer.toLocaleString() + " FCFA\n\n";
+    
+    msg += "💳 MODE DE PAIEMENT\n";
+    msg += "   " + modePaiement + "\n\n";
+    
+    msg += "📄 DOCUMENT\n";
+    msg += "   Type: " + typeDocument + "\n";
+    msg += "   Format: " + (formatImpression === '80mm' ? 'Ticket 80mm' : 'A4') + "\n\n";
+    
+    msg += "✅ Voulez-vous confirmer cette vente ?";
+    
+    return confirm(msg);
+}
+
+function afficherRecapModal() {
+    if (panier.length === 0) {
+        alert('Le panier est vide');
+        return false;
+    }
+    
+    if (!patientId || patientId === 'null' || patientId === 'undefined') {
+        alert('Veuillez sélectionner un patient');
+        return false;
+    }
+    
+    let sousTotal = panier.reduce((sum, item) => sum + item.total, 0);
+    let tauxUtilise = parseFloat(document.getElementById('tauxVente').value);
+    if (isNaN(tauxUtilise)) {
+        tauxUtilise = patientTaux;
+    }
+    let priseEnCharge = (sousTotal * tauxUtilise) / 100;
+    let netAPayer = sousTotal - priseEnCharge;
+    
+    let modePaiement = document.getElementById('modePaiement').value;
+    let typeDocument = document.getElementById('typeDocument').value;
+    let formatImpression = document.getElementById('formatImpression').value;
+    
+    let html = `
+        <div class="row">
+            <div class="col-md-6">
+                <h6><i class="fas fa-user text-primary"></i> Patient</h6>
+                <p><strong>${patientName}</strong><br>
+                <span class="text-muted">ID: ${patientId}</span><br>
+                <span class="text-muted">Assurance: ${patientTaux}%</span></p>
+            </div>
+            <div class="col-md-6 text-end">
+                <h6><i class="fas fa-receipt text-primary"></i> Document</h6>
+                <p><span class="badge bg-info">${typeDocument}</span><br>
+                <span class="text-muted">Format: ${formatImpression === '80mm' ? 'Ticket 80mm' : 'A4'}</span></p>
+            </div>
+        </div>
+        <hr>
+        <h6><i class="fas fa-boxes text-primary"></i> Produits</h6>
+        <div class="table-responsive">
+            <table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>Produit</th>
+                        <th class="text-center">Qté</th>
+                        <th class="text-end">Prix</th>
+                        <th class="text-end">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+    
+    panier.forEach(item => {
+        html += `
+            <tr>
+                <td>${item.nom}</td>
+                <td class="text-center">${item.quantite}</td>
+                <td class="text-end">${item.prix.toLocaleString()} F</td>
+                <td class="text-end">${(item.prix * item.quantite).toLocaleString()} F</td>
+            </tr>
+        `;
+    });
+    
+    html += `
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <th colspan="3" class="text-end">Sous-total</th>
+                        <th class="text-end">${sousTotal.toLocaleString()} F</th>
+                    </tr>
+                    <tr>
+                        <th colspan="3" class="text-end text-success">Prise en charge (${tauxUtilise}%)</th>
+                        <th class="text-end text-success">-${priseEnCharge.toLocaleString()} F</th>
+                    </tr>
+                    <tr>
+                        <th colspan="3" class="text-end text-danger">NET À PAYER</th>
+                        <th class="text-end text-danger fw-bold">${netAPayer.toLocaleString()} F</th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+        <div class="row">
+            <div class="col-md-6">
+                <p><i class="fas fa-credit-card"></i> <strong>Paiement:</strong> ${modePaiement}</p>
+            </div>
+            <div class="col-md-6 text-end">
+                <p><i class="fas fa-user-circle"></i> <strong>Caissier:</strong> ${sessionStorage.getItem('user_name') || 'Système'}</p>
+            </div>
+        </div>
+        <div class="alert alert-warning small mt-2">
+            <i class="fas fa-info-circle"></i> Vérifiez les informations avant de confirmer
+        </div>
+    `;
+    
+    document.getElementById('recapContent').innerHTML = html;
+    new bootstrap.Modal(document.getElementById('recapModal')).show();
+}
+
+function confirmerVente() {
+    bootstrap.Modal.getInstance(document.getElementById('recapModal')).hide();
+    // Appeler la fonction de finalisation
+    finaliserVenteApresRecap();
+}
+
 // ========== INITIALISATION ==========
 window.onload = function() {
     checkSelectedPatient();
