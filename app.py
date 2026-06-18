@@ -3560,6 +3560,7 @@ def api_get_all_ventes():
             if isinstance(v, dict):
                 detail = ""
                 
+                # Pour les actes
                 if v.get('type') == 'actes' and v.get('actes'):
                     actes_data = v.get('actes')
                     if isinstance(actes_data, str):
@@ -3575,11 +3576,16 @@ def api_get_all_ventes():
                                 articles.append(nom)
                         detail = ", ".join(articles)
                 
-                elif v.get('type') == 'pharma' and v.get('produits'):
+                # 🔥 Pour la pharmacie - accepter 'pharma' ET 'pharmacie'
+                elif v.get('type') in ['pharma', 'pharmacie'] and v.get('produits'):
                     produits_data = v.get('produits')
                     if isinstance(produits_data, str):
-                        produits_data = json.loads(produits_data)
-                    if produits_data:
+                        try:
+                            produits_data = json.loads(produits_data)
+                        except:
+                            produits_data = []
+                    
+                    if produits_data and len(produits_data) > 0:
                         articles = []
                         for p in produits_data:
                             nom = p.get('nom', 'Produit')
@@ -3589,6 +3595,8 @@ def api_get_all_ventes():
                             else:
                                 articles.append(nom)
                         detail = ", ".join(articles)
+                    else:
+                        detail = '-'
                 
                 result.append({
                     'ID': v.get('id'),
@@ -3598,8 +3606,8 @@ def api_get_all_ventes():
                     'taux_assurance': v.get('taux_assurance', 0),
                     'date': str(v.get('date_vente', '')),
                     'detail': detail if detail else '-',
-                    'created_by_nom': v.get('created_by_nom', None),  # ← AJOUTE CETTE LIGNE
-                    'statut': v.get('statut', 'validee')  # ← AJOUTE AUSSI LE STATUT
+                    'created_by_nom': v.get('created_by_nom', None),
+                    'statut': v.get('statut', 'validee')
                 })
         
         return jsonify(result)
