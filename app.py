@@ -155,35 +155,6 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-def mettre_a_jour_solde_caisse(structure_id):
-    """Met à jour le solde de caisse en fonction des recettes et dépenses"""
-    recettes = db.execute_query("""
-        SELECT COALESCE(SUM(montant), 0) as total 
-        FROM recettes 
-        WHERE structure_id = %s 
-        AND (est_annulation IS NULL OR est_annulation = FALSE)
-    """, (structure_id,))
-    
-    depenses = db.execute_query("""
-        SELECT COALESCE(SUM(montant), 0) as total 
-        FROM depenses 
-        WHERE structure_id = %s
-    """, (structure_id,))
-    
-    total_recettes = recettes[0]['total'] if recettes else 0
-    total_depenses = depenses[0]['total'] if depenses else 0
-    nouveau_solde = total_recettes - total_depenses
-    
-    db.execute_query("""
-        INSERT INTO caisse (structure_id, solde_actuel, date_mise_a_jour)
-        VALUES (%s, %s, NOW())
-        ON CONFLICT (structure_id) DO UPDATE SET 
-            solde_actuel = EXCLUDED.solde_actuel,
-            date_mise_a_jour = NOW()
-    """, (structure_id, nouveau_solde))
-    
-    return nouveau_solde
-
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if 'user_id' in session:
@@ -705,101 +676,6 @@ def pharma_vente():
     
     return render_template('pharma_vente.html', produits=produits_filtres, patients=patients)
 
-@app.route('/api/ventes/pharma', methods=['POST'])
-@login_required
-def api_add_pharma_vente():
-    try:
-        data = request.json
-        structure_id = session.get('structure_id')
-        
-        print("=" * 60)
-        print("📦 VENTE PHARMACIE")
-        print(f"Patient: {data.get('patient_nom')}")
-        print(f"Produits: {data.get('produits')}")
-        print("=" * 60)
-        
-        if not structure_id:
-            return jsonify({'success': False, 'error': 'Structure non trouvee'}), 400
-        
-        patient_id = data.get('patient_id')
-        if not patient_id:
-            return jsonify({'success': False, 'error': 'ID patient manquant'}), 400
-        
-        from datetime import datetime
-        import json
-        
-        # 🔥 1. Enregistrer la vente dans Neon
-        result = db.execute_query("""
-            INSERT INTO ventes (
-                patient_id, patient_nom, structure_id, type, 
-                sous_total, prise_en_charge, net_a_payer, 
-                mode_paiement, taux_assurance, date_vente, produits
-            )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s::jsonb)
-            RETURNING id
-        """, (
-            patient_id,
-            data.get('patient_nom', 'Patient'),
-            structure_id,
-            'pharmacie',
-            float(data.get('sous_total', 0)),
-            float(data.get('prise_en_charge', 0)),
-            float(data.get('net_a_payer', 0)),
-            data.get('mode_paiement', 'especes'),
-            float(data.get('taux_assurance', 0)),
-            json.dumps(data.get('produits', []), ensure_ascii=False)
-        ))
-        
-        if not result or len(result) == 0:
-            return jsonify({'success': False, 'error': 'Erreur insertion vente'}), 500
-        
-        vente_id = result[0]['id']
-        print(f"✅ Vente enregistrée dans Neon avec ID: {vente_id}")
-        
-        # 🔥 2. Mettre à jour les stocks dans Google Sheets (pas Neon)
-        try:
-            sheet_name = f"struct_{structure_id}_produits"
-            print(f"   📂 Accès à la feuille: {sheet_name}")
-            
-            worksheet = sheets_helper.spreadsheet.worksheet(sheet_name)
-            
-            for produit in data.get('produits', []):
-                produit_id = str(produit.get('id'))
-                quantite_vendue = int(produit.get('quantite', 0))
-                produit_nom = produit.get('nom', 'Inconnu')
-                
-                print(f"   🔍 Recherche ID: {produit_id} - {produit_nom}")
-                
-                # Chercher le produit dans Sheets (colonne A = ID)
-                cell = worksheet.find(produit_id, in_column=1)
-                if cell:
-                    row_num = cell.row
-                    current_row = worksheet.row_values(row_num)
-                    stock_actuel = int(current_row[3]) if len(current_row) > 3 else 0
-                    nouveau_stock = stock_actuel - quantite_vendue
-                    
-                    print(f"   📊 Stock: {stock_actuel} → {nouveau_stock}")
-                    
-                    # Mettre à jour la cellule du stock (colonne D = index 4)
-                    worksheet.update_cell(row_num, 4, nouveau_stock)
-                    print(f"   ✅ Stock Sheets mis à jour pour {produit_nom}")
-                else:
-                    print(f"   ❌ Produit ID {produit_id} non trouvé dans Sheets!")
-                    print(f"   📋 IDs disponibles: {worksheet.col_values(1)}")
-                    
-        except Exception as e:
-            print(f"   ❌ ERREUR mise à jour stock Sheets: {e}")
-            import traceback
-            traceback.print_exc()
-        
-        return jsonify({'success': True, 'vente_id': vente_id})
-        
-    except Exception as e:
-        print(f"❌ ERREUR: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)}), 500
-
 @app.route('/facture/<int:vente_id>/<string:type>')
 @login_required
 def facture(vente_id, type):
@@ -1185,55 +1061,82 @@ def historique_ventes():
     """Affiche l'historique des ventes avec stats"""
     structure_id = session.get('structure_id')
     
-    # Récupérer les ventes d'actes
+    # ========== 1. VENTES D'ACTES (Google Sheets) ==========
     ventes_actes = sheets_helper.get_all_records('ventes_actes')
+    ventes_actes_filtrees = []
     for v in ventes_actes:
-        v['type'] = 'actes'
-        v['acte_nom'] = v.get('acte_nom', 'Acte')
-        # S'assurer que la date est une chaîne
-        date_val = v.get('date', '')
-        if date_val is None:
-            date_val = ''
-        v['date'] = str(date_val) if date_val else ''
+        if str(v.get('structure_id')) == str(structure_id):
+            v['type'] = 'actes'
+            v['acte_nom'] = v.get('acte_nom', 'Acte')
+            date_val = v.get('date', '')
+            v['date'] = str(date_val) if date_val else ''
+            ventes_actes_filtrees.append(v)
     
-    # Récupérer les ventes de pharmacie
-    ventes_pharma = sheets_helper.get_all_records('ventes_pharma')
-    for v in ventes_pharma:
-        v['type'] = 'pharma'
-        v['produit_nom'] = v.get('produit_nom', 'Produit')
-        date_val = v.get('date', '')
-        if date_val is None:
-            date_val = ''
-        v['date'] = str(date_val) if date_val else ''
+    # ========== 2. VENTES PHARMACIE (Neon - exclure annulées) ==========
+    ventes_pharma_db = db.execute_query("""
+        SELECT 
+            id, patient_nom, net_a_payer, taux_assurance, 
+            date_vente, produits, created_by_nom
+        FROM ventes 
+        WHERE structure_id = %s 
+        AND type IN ('pharma', 'pharmacie')
+        AND (statut IS NULL OR statut != 'annulee')
+        ORDER BY date_vente DESC
+    """, (structure_id,))
     
-    # Fusionner et trier par date (plus récent d'abord)
-    toutes_ventes = ventes_actes + ventes_pharma
+    ventes_pharma = []
+    for v in ventes_pharma_db:
+        if isinstance(v, dict):
+            import json
+            produits_data = v.get('produits')
+            if isinstance(produits_data, str):
+                try:
+                    produits_data = json.loads(produits_data)
+                except:
+                    produits_data = []
+            
+            nom_produit = 'Produit'
+            if produits_data and len(produits_data) > 0:
+                nom_produit = produits_data[0].get('nom', 'Produit')
+            
+            ventes_pharma.append({
+                'ID': v.get('id'),
+                'patient_nom': v.get('patient_nom', 'Patient'),
+                'type': 'pharma',
+                'acte_nom': nom_produit,
+                'produit_nom': nom_produit,
+                'net_a_payer': float(v.get('net_a_payer', 0)),
+                'taux_assurance': v.get('taux_assurance', 0),
+                'date': str(v.get('date_vente', '')),
+                'created_by_nom': v.get('created_by_nom', 'System')
+            })
     
-    # Fonction de tri sécurisée
+    # ========== 3. FUSIONNER ET TRIER ==========
+    toutes_ventes = ventes_actes_filtrees + ventes_pharma
+    
     def get_date_key(x):
         date_val = x.get('date', '')
-        if date_val is None:
-            return ''
-        return str(date_val)
+        return str(date_val) if date_val else ''
     
     toutes_ventes.sort(key=get_date_key, reverse=True)
     
-    # Statistiques
-    total_actes = len([v for v in ventes_actes if str(v.get('structure_id')) == str(structure_id)])
+    # ========== 4. STATISTIQUES ==========
+    total_actes = len([v for v in ventes_actes_filtrees if str(v.get('structure_id')) == str(structure_id)])
     total_pharma = len([v for v in ventes_pharma if str(v.get('structure_id')) == str(structure_id)])
-    ca_total = sum([float(v.get('net_a_payer', 0)) for v in toutes_ventes if str(v.get('structure_id')) == str(structure_id)])
+    
+    # CA total = somme des net_a_payer (exclut annulées car filtrées)
+    ca_total = sum([float(v.get('net_a_payer', 0)) for v in toutes_ventes])
     
     # Top actes
     actes_count = {}
-    for v in ventes_actes:
-        if str(v.get('structure_id')) == str(structure_id):
-            nom = v.get('acte_nom', 'Acte')
-            quantite = int(v.get('quantite', 1))
-            total = float(v.get('total', 0))
-            if nom not in actes_count:
-                actes_count[nom] = {'quantite': 0, 'total': 0}
-            actes_count[nom]['quantite'] += quantite
-            actes_count[nom]['total'] += total
+    for v in ventes_actes_filtrees:
+        nom = v.get('acte_nom', 'Acte')
+        quantite = int(v.get('quantite', 1))
+        total = float(v.get('total', 0))
+        if nom not in actes_count:
+            actes_count[nom] = {'quantite': 0, 'total': 0}
+        actes_count[nom]['quantite'] += quantite
+        actes_count[nom]['total'] += total
     
     top_actes = sorted(actes_count.items(), key=lambda x: x[1]['quantite'], reverse=True)[:5]
     top_actes_list = [{'nom': k, 'quantite': v['quantite'], 'total': v['total']} for k, v in top_actes]
@@ -1241,14 +1144,13 @@ def historique_ventes():
     # Top produits
     produits_count = {}
     for v in ventes_pharma:
-        if str(v.get('structure_id')) == str(structure_id):
-            nom = v.get('produit_nom', 'Produit')
-            quantite = int(v.get('quantite', 1))
-            total = float(v.get('total', 0))
-            if nom not in produits_count:
-                produits_count[nom] = {'quantite': 0, 'total': 0}
-            produits_count[nom]['quantite'] += quantite
-            produits_count[nom]['total'] += total
+        nom = v.get('produit_nom', 'Produit')
+        quantite = 1
+        total = v.get('net_a_payer', 0)
+        if nom not in produits_count:
+            produits_count[nom] = {'quantite': 0, 'total': 0}
+        produits_count[nom]['quantite'] += quantite
+        produits_count[nom]['total'] += total
     
     top_produits = sorted(produits_count.items(), key=lambda x: x[1]['quantite'], reverse=True)[:5]
     top_produits_list = [{'nom': k, 'quantite': v['quantite'], 'total': v['total']} for k, v in top_produits]
@@ -3196,10 +3098,11 @@ def api_vente_pharma():
             vendeur = 'System'
         
         print("=" * 60)
-        print("VENTE PHARMACIE")
+        print("📦 VENTE PHARMACIE")
         print(f"Patient: {data.get('patient_nom')}")
         print(f"Vendeur: {vendeur}")
         print(f"Produits: {data.get('produits')}")
+        print(f"Net à payer: {data.get('net_a_payer')} FCFA")
         print("=" * 60)
         
         if not structure_id:
@@ -3209,15 +3112,24 @@ def api_vente_pharma():
         if not patient_id:
             return jsonify({'success': False, 'error': 'ID patient manquant'}), 400
         
-        # ✅ Enregistrer la vente dans Neon
+        # ========== 1. ENREGISTRER LA VENTE DANS NEON ==========
         result = db.execute_query("""
             INSERT INTO ventes (
-                patient_id, patient_nom, structure_id, type, 
-                sous_total, prise_en_charge, net_a_payer, 
-                mode_paiement, taux_assurance, date_vente, 
-                produits, created_by_nom
+                patient_id, 
+                patient_nom, 
+                structure_id, 
+                type, 
+                sous_total, 
+                prise_en_charge, 
+                net_a_payer, 
+                mode_paiement, 
+                taux_assurance, 
+                date_vente, 
+                produits, 
+                created_by_nom,
+                statut
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s::jsonb, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s::jsonb, %s, 'validee')
             RETURNING id
         """, (
             patient_id,
@@ -3233,55 +3145,123 @@ def api_vente_pharma():
             vendeur
         ))
         
-        if result and len(result) > 0:
-            vente_id = result[0]['id']
-            print(f"✅ Vente pharmacie ID: {vente_id}")
+        if not result or len(result) == 0:
+            print("❌ Erreur: Aucun ID retourné pour la vente")
+            return jsonify({'success': False, 'error': 'Erreur insertion vente'}), 500
+        
+        vente_id = result[0]['id']
+        print(f"✅ Vente pharmacie enregistrée dans Neon avec ID: {vente_id}")
+        
+        # ========== 2. AJOUTER LA RECETTE DANS NEON ==========
+        net_a_payer = float(data.get('net_a_payer', 0))
+        if net_a_payer > 0:
+            recette_result = db.execute_query("""
+                INSERT INTO recettes (
+                    structure_id, 
+                    montant, 
+                    source, 
+                    source_id, 
+                    source_type, 
+                    description, 
+                    created_by_nom,
+                    date_recette
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                RETURNING id
+            """, (
+                structure_id,
+                net_a_payer,
+                'patients',
+                vente_id,
+                'vente_pharma',
+                'Vente pharmacie #' + str(vente_id) + ' - ' + data.get('patient_nom', 'Patient'),
+                vendeur
+            ))
             
-            # ❌ SUPPRIME L'ANCIENNE MISE À JOUR DU STOCK ICI
-            # ⚠️ NE GARDE QUE LA MISE À JOUR DANS SHEETS
+            if recette_result and len(recette_result) > 0:
+                print(f"✅ Recette ajoutée avec ID: {recette_result[0]['id']} pour {net_a_payer} FCFA")
+            else:
+                print("⚠️ Erreur lors de l'insertion de la recette")
+        
+        # ========== 3. METTRE À JOUR LE STOCK DANS GOOGLE SHEETS ==========
+        try:
+            sheet_name = f"struct_{structure_id}_produits"
+            print(f"   📂 Accès à la feuille: {sheet_name}")
             
-            # ✅ MISE À JOUR DU STOCK DANS GOOGLE SHEETS
-            try:
-                sheet_name = f"struct_{structure_id}_produits"
-                print(f"   📂 Feuille: {sheet_name}")
+            worksheet = sheets_helper.spreadsheet.worksheet(sheet_name)
+            
+            for produit in data.get('produits', []):
+                produit_id = str(produit.get('id'))
+                quantite_vendue = int(produit.get('quantite', 0))
+                produit_nom = produit.get('nom', 'Inconnu')
                 
-                worksheet = sheets_helper.spreadsheet.worksheet(sheet_name)
+                print(f"   🔍 Recherche du produit ID: {produit_id} - {produit_nom}")
                 
-                for produit in data.get('produits', []):
-                    produit_id = str(produit.get('id'))
-                    quantite_vendue = int(produit.get('quantite', 0))
-                    produit_nom = produit.get('nom', 'Inconnu')
+                # Chercher le produit dans Sheets (colonne A = ID)
+                cell = worksheet.find(produit_id, in_column=1)
+                if cell:
+                    row_num = cell.row
+                    current_row = worksheet.row_values(row_num)
+                    stock_actuel = int(current_row[3]) if len(current_row) > 3 else 0
+                    nouveau_stock = stock_actuel - quantite_vendue
                     
-                    print(f"   🔍 Recherche du produit ID: {produit_id} - {produit_nom}")
+                    if nouveau_stock < 0:
+                        print(f"   ⚠️ Stock négatif! {produit_nom}: {stock_actuel} - {quantite_vendue} = {nouveau_stock}")
+                        # On force à 0 pour éviter les stocks négatifs
+                        nouveau_stock = 0
                     
-                    # Chercher le produit dans Sheets (colonne A = ID)
-                    cell = worksheet.find(produit_id, in_column=1)
-                    if cell:
-                        row_num = cell.row
-                        current_row = worksheet.row_values(row_num)
-                        stock_actuel = int(current_row[3]) if len(current_row) > 3 else 0
-                        nouveau_stock = stock_actuel - quantite_vendue
-                        
-                        print(f"   📊 Stock: {stock_actuel} → {nouveau_stock}")
-                        
-                        # Mettre à jour la cellule du stock (colonne D = index 4)
-                        worksheet.update_cell(row_num, 4, nouveau_stock)
-                        print(f"   ✅ Stock Sheets mis à jour pour {produit_nom}")
-                    else:
-                        print(f"   ❌ Produit ID {produit_id} non trouvé dans Sheets!")
-                        print(f"   📋 IDs disponibles: {worksheet.col_values(1)}")
-                        
-            except Exception as e:
-                print(f"   ❌ ERREUR mise à jour stock Sheets: {e}")
-                import traceback
-                traceback.print_exc()
+                    print(f"   📊 Stock: {stock_actuel} → {nouveau_stock}")
+                    
+                    # Mettre à jour la cellule du stock (colonne D = index 4)
+                    worksheet.update_cell(row_num, 4, nouveau_stock)
+                    print(f"   ✅ Stock Sheets mis à jour pour {produit_nom}")
+                else:
+                    print(f"   ❌ Produit ID {produit_id} non trouvé dans Sheets!")
+                    print(f"   📋 IDs disponibles: {worksheet.col_values(1)}")
+                    
+        except Exception as e:
+            print(f"   ❌ ERREUR mise à jour stock Sheets: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        # ========== 4. METTRE À JOUR LE SOLDE DE CAISSE ==========
+        try:
+            # Recalculer le solde total
+            recettes_total = db.execute_query("""
+                SELECT COALESCE(SUM(montant), 0) as total 
+                FROM recettes 
+                WHERE structure_id = %s 
+                AND (est_annulation IS NULL OR est_annulation = FALSE)
+            """, (structure_id,))
             
-            return jsonify({'success': True, 'vente_id': vente_id})
-        else:
-            return jsonify({'success': False, 'error': 'Erreur insertion'}), 500
+            depenses_total = db.execute_query("""
+                SELECT COALESCE(SUM(montant), 0) as total 
+                FROM depenses 
+                WHERE structure_id = %s
+            """, (structure_id,))
             
+            total_recettes = recettes_total[0]['total'] if recettes_total else 0
+            total_depenses = depenses_total[0]['total'] if depenses_total else 0
+            nouveau_solde = total_recettes - total_depenses
+            
+            db.execute_query("""
+                INSERT INTO caisse (structure_id, solde_actuel, date_mise_a_jour)
+                VALUES (%s, %s, NOW())
+                ON CONFLICT (structure_id) DO UPDATE SET 
+                    solde_actuel = EXCLUDED.solde_actuel,
+                    date_mise_a_jour = NOW()
+            """, (structure_id, nouveau_solde))
+            
+            print(f"💰 Solde de caisse mis à jour: {nouveau_solde} FCFA")
+            
+        except Exception as e:
+            print(f"⚠️ Erreur mise à jour solde: {e}")
+        
+        print(f"✅ Vente pharmacie #{vente_id} terminée avec succès!")
+        return jsonify({'success': True, 'vente_id': vente_id})
+        
     except Exception as e:
-        print(f"ERREUR: {e}")
+        print(f"❌ ERREUR GENERALE: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -4683,6 +4663,46 @@ def calculer_age(date_naissance):
     if (today.month, today.day) < (date_naissance.month, date_naissance.day):
         age -= 1
     return age
+
+@app.route('/api/finances/recettes/source')
+@login_required
+def api_recettes_source():
+    if not session.get('is_admin'):
+        return jsonify({'error': 'Non autorise'}), 403
+    
+    try:
+        structure_id = session.get('structure_id')
+        date_debut = request.args.get('date_debut')
+        date_fin = request.args.get('date_fin')
+        
+        where_clause = "WHERE structure_id = %s AND (est_annulation IS NULL OR est_annulation = FALSE)"
+        params = [structure_id]
+        
+        if date_debut and date_fin:
+            date_debut_formatted = date_debut + " 00:00:00"
+            date_fin_formatted = date_fin + " 23:59:59"
+            where_clause += " AND date_recette BETWEEN %s AND %s"
+            params.extend([date_debut_formatted, date_fin_formatted])
+        
+        # 🔥 Recettes par source
+        query = f"""
+            SELECT 
+                source,
+                source_type,
+                COUNT(*) as nombre,
+                COALESCE(SUM(montant), 0) as total
+            FROM recettes 
+            {where_clause}
+            GROUP BY source, source_type
+            ORDER BY source, source_type
+        """
+        recettes = db.execute_query(query, params)
+        
+        return jsonify(recettes)
+        
+    except Exception as e:
+        print(f"Erreur: {e}")
+        return jsonify([]), 500
 
 if __name__ == '__main__':
     # Récupère le port depuis la variable d'environnement ou utilise 5000 par défaut
