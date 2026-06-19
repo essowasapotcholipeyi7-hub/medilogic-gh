@@ -820,7 +820,7 @@ function creerProformaSuite(patientId, patientNom, patientAssurance, patientTaux
     .then(data => {
         hideLoader();
         if (data.success) {
-            alert(`✅ Proforma #${data.id} créée !\nNet à payer: ${data.net_a_payer.toLocaleString()} FCFA`);
+            alert(`✅ Proforma #${data.numero} créée !\nNet à payer: ${data.net_a_payer.toLocaleString()} FCFA`);
             
             if (confirm('Imprimer la proforma ?')) {
                 window.open(`/proforma/${data.id}/print`, '_blank');

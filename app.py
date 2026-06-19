@@ -4712,9 +4712,10 @@ def api_recettes_source():
 @login_required
 def proformas():
     """Liste des proformas de la structure"""
-    if not session.get('is_admin'):
-        flash('Accès non autorisé', 'danger')
-        return redirect(url_for('dashboard'))
+    # 🔥 Enlever la vérification admin
+    # if not session.get('is_admin'):
+    #     flash('Accès non autorisé', 'danger')
+    #     return redirect(url_for('dashboard'))
     
     structure_id = session.get('structure_id')
     
@@ -4753,7 +4754,6 @@ def proformas():
                          proformas=proformas,
                          stats=stats)
 
-
 @app.route('/api/proformas', methods=['POST'])
 @login_required
 def api_creer_proforma():
@@ -4784,7 +4784,17 @@ def api_creer_proforma():
         
         expires_at = datetime.now() + timedelta(days=7)
         
-        # Insérer la proforma
+        # 🔥 Récupérer le prochain numéro pour cette structure
+        next_numero = db.execute_query("""
+            SELECT COALESCE(MAX(numero_proforma), 0) + 1 as next_num
+            FROM proformas 
+            WHERE structure_id = %s
+        """, (structure_id,))
+        
+        prochain_numero = next_numero[0]['next_num'] if next_numero else 1
+        print(f"   Numéro proforma pour structure {structure_id}: {prochain_numero}")
+        
+        # Insérer la proforma avec le numéro
         result = db.execute_query("""
             INSERT INTO proformas (
                 structure_id, 
@@ -4801,9 +4811,10 @@ def api_creer_proforma():
                 net_a_payer, 
                 notes,
                 created_by,
-                expires_at
+                expires_at,
+                numero_proforma
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
             structure_id,
@@ -4820,18 +4831,20 @@ def api_creer_proforma():
             net_a_payer,
             data.get('notes', ''),
             user_name,
-            expires_at
+            expires_at,
+            prochain_numero
         ))
         
         proforma_id = result[0]['id']
         
-        print(f"✅ Proforma #{proforma_id} créée")
+        print(f"✅ Proforma #{proforma_id} créée (Numéro: {prochain_numero})")
         print(f"   Sous-total: {sous_total} FCFA")
         print(f"   Net à payer: {net_a_payer} FCFA")
         
         return jsonify({
             'success': True,
             'id': proforma_id,
+            'numero': prochain_numero,
             'net_a_payer': net_a_payer,
             'sous_total': sous_total,
             'prise_en_charge': prise_en_charge
@@ -4842,7 +4855,6 @@ def api_creer_proforma():
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
-
 
 @app.route('/api/proformas/<int:proforma_id>/statut', methods=['PUT'])
 @login_required

@@ -407,7 +407,7 @@
             </div>
             <div class="header-right">
                 <div class="badge-proforma">PROFORMA</div>
-                <div class="numero">#{{ proforma.id }}</div>
+                <div class="numero">#{{ proforma.numero_proforma or proforma.id }}</div>
                 <div class="date">Date : {{ proforma.created_at.strftime('%d/%m/%Y à %H:%M') if proforma.created_at else '-' }}</div>
             </div>
         </div>

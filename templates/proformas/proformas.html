@@ -72,7 +72,7 @@
                         <tbody>
                             {% for p in proformas %}
                             <tr>
-                                <td><strong>#{{ p.id }}</strong></td>
+                                <td><strong>#{{ p.numero_proforma or p.id }}</strong></td>
                                 <td>{{ p.patient_nom }}</td>
                                 <td>{{ p.created_at.strftime('%d/%m/%Y') if p.created_at else '-' }}</td>
                                 <td><strong>{{ p.net_a_payer|round(0)|int }} FCFA</strong></td>
