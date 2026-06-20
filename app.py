@@ -575,6 +575,57 @@ def api_add_patient():
         if db.conn:
             db.conn.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
+@app.route('/api/patients', methods=['GET'])
+@login_required
+def api_get_patients():
+    """Récupérer tous les patients de la structure"""
+    try:
+        structure_id = session.get('structure_id')
+        
+        patients = db.execute_query("""
+            SELECT id, nom, prenom, telephone, adresse, date_naissance,
+                   type_assurance, taux_prise_charge, numero_assure
+            FROM patients 
+            WHERE structure_id = %s 
+            ORDER BY nom, prenom
+        """, (structure_id,))
+        
+        result = []
+        for p in patients:
+            if isinstance(p, dict):
+                date_naissance = p.get('date_naissance')
+                result.append({
+                    'id': p.get('id'),
+                    'nom': p.get('nom', ''),
+                    'prenom': p.get('prenom', ''),
+                    'telephone': p.get('telephone', ''),
+                    'adresse': p.get('adresse', ''),
+                    'date_naissance': date_naissance.strftime('%Y-%m-%d') if date_naissance else '',
+                    'type_assurance': p.get('type_assurance', 'non_assure'),
+                    'taux_prise_charge': p.get('taux_prise_charge', 0),
+                    'numero_assure': p.get('numero_assure', '')
+                })
+            else:
+                date_naissance = p[5] if len(p) > 5 else None
+                result.append({
+                    'id': p[0],
+                    'nom': p[1] if len(p) > 1 else '',
+                    'prenom': p[2] if len(p) > 2 else '',
+                    'telephone': p[3] if len(p) > 3 else '',
+                    'adresse': p[4] if len(p) > 4 else '',
+                    'date_naissance': date_naissance.strftime('%Y-%m-%d') if date_naissance else '',
+                    'type_assurance': p[6] if len(p) > 6 else 'non_assure',
+                    'taux_prise_charge': p[7] if len(p) > 7 else 0,
+                    'numero_assure': p[8] if len(p) > 8 else ''
+                })
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        print(f"❌ Erreur GET patients: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify([]), 500
 
 @app.route('/api/patients/<int:id>', methods=['GET'])
 @login_required
@@ -2873,6 +2924,49 @@ def api_get_produits():
     
     return jsonify(produits_liste)
 
+@app.route('/api/produits/search')
+@login_required
+def api_produits_search():
+    """Rechercher des produits depuis Google Sheets (pour proforma)"""
+    try:
+        structure_id = session.get('structure_id')
+        search = request.args.get('search', '').strip()
+        limit = int(request.args.get('limit', 50))
+        offset = int(request.args.get('offset', 0))
+        
+        produits = sheets_helper.get_all_records('produits')
+        
+        produits_liste = []
+        for p in produits:
+            if str(p.get('structure_id')) == str(structure_id):
+                produits_liste.append({
+                    'id': p.get('ID'),
+                    'nom': p.get('nom', ''),
+                    'prix_vente': float(p.get('prix_vente', 0)),
+                    'quantite_stock': int(p.get('quantite_stock', 0)),
+                    'seuil_alerte': int(p.get('seuil_alerte', 10)),
+                    'unite': p.get('unite', 'unité')
+                })
+        
+        if search:
+            search_lower = search.lower()
+            produits_liste = [p for p in produits_liste 
+                             if search_lower in p['nom'].lower()]
+        
+        total = len(produits_liste)
+        paginated = produits_liste[offset:offset + limit]
+        
+        return jsonify({
+            'data': paginated,
+            'total': total,
+            'limit': limit,
+            'offset': offset,
+            'has_more': (offset + limit) < total
+        })
+        
+    except Exception as e:
+        return jsonify({'data': [], 'total': 0, 'error': str(e)}), 500
+
 # ========== GESTION PRODUITS (Google Sheets) ==========
 
 @app.route('/api/admin/produits', methods=['POST'])
@@ -3674,22 +3768,86 @@ def api_get_all_ventes():
 @app.route('/api/actes')
 @login_required
 def api_get_actes():
-    """Récupérer tous les actes depuis Neon"""
+    """Récupérer les actes depuis Google Sheets avec recherche"""
     try:
         structure_id = session.get('structure_id')
+        search = request.args.get('search', '').strip()
+        limit = int(request.args.get('limit', 50))
+        offset = int(request.args.get('offset', 0))
         
-        actes = db.execute_query("""
-            SELECT id, code, nom, prix, description
-            FROM actes 
-            WHERE structure_id = %s 
-            ORDER BY nom
-        """, (structure_id,))
+        print(f"📂 Recherche actes: '{search}' (limit={limit}, offset={offset})")
         
-        return jsonify(actes)
+        # 🔥 Utiliser le bon nom de feuille avec préfixe
+        sheet_name = f"struct_{structure_id}_actes"
+        print(f"   Feuille: {sheet_name}")
+        
+        try:
+            # Essayer avec le préfixe
+            worksheet = sheets_helper.spreadsheet.worksheet(sheet_name)
+            actes = worksheet.get_all_records()
+            print(f"📊 Total actes dans {sheet_name}: {len(actes)}")
+        except Exception as e:
+            print(f"⚠️ Feuille {sheet_name} non trouvée: {e}")
+            # Fallback: essayer sans préfixe
+            print("   Tentative avec 'actes' sans préfixe...")
+            actes = sheets_helper.get_all_records('actes', use_prefix=False)
+            print(f"📊 Total actes dans 'actes': {len(actes)}")
+        
+        # Filtrer par structure (si besoin)
+        actes_struct = []
+        for a in actes:
+            sid = a.get('structure_id') or a.get('STRUCTURE_ID') or a.get('structureId')
+            if sid is None or str(sid) == str(structure_id):
+                actes_struct.append(a)
+        
+        # Filtrer par recherche
+        if search:
+            search_lower = search.lower()
+            actes_struct = [a for a in actes_struct 
+                           if search_lower in str(a.get('nom', '')).lower() 
+                           or search_lower in str(a.get('code', '')).lower()]
+        
+        total = len(actes_struct)
+        
+        # Pagination
+        paginated = actes_struct[offset:offset + limit]
+        
+        result = []
+        for a in paginated:
+            # Prix : gérer les valeurs non numériques
+            prix_raw = a.get('prix') or a.get('PRIX') or a.get('Prix') or 0
+            if prix_raw is None or prix_raw == '' or prix_raw == '-' or prix_raw == ' - ':
+                prix_float = 0
+            else:
+                try:
+                    prix_str = str(prix_raw).strip().replace(' ', '').replace(',', '').replace('FCFA', '')
+                    prix_float = float(prix_str) if prix_str else 0
+                except (ValueError, TypeError):
+                    prix_float = 0
+            
+            acte_nom = a.get('nom') or a.get('NOM') or a.get('Nom')
+            if acte_nom and str(acte_nom).strip():
+                result.append({
+                    'id': a.get('ID') or a.get('id'),
+                    'code': str(a.get('code', '') or ''),
+                    'nom': str(acte_nom).strip(),
+                    'prix': prix_float,
+                    'description': str(a.get('description', '') or '')
+                })
+        
+        return jsonify({
+            'data': result,
+            'total': total,
+            'limit': limit,
+            'offset': offset,
+            'has_more': (offset + limit) < total
+        })
         
     except Exception as e:
-        print(f"❌ Erreur: {e}")
-        return jsonify([]), 500
+        print(f"❌ Erreur GET actes: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'data': [], 'total': 0, 'error': str(e)}), 500
 
 @app.route('/api/ventes/<int:vente_id>/annuler', methods=['POST'])
 @login_required
@@ -4712,11 +4870,6 @@ def api_recettes_source():
 @login_required
 def proformas():
     """Liste des proformas de la structure"""
-    # 🔥 Enlever la vérification admin
-    # if not session.get('is_admin'):
-    #     flash('Accès non autorisé', 'danger')
-    #     return redirect(url_for('dashboard'))
-    
     structure_id = session.get('structure_id')
     
     # Récupérer toutes les proformas
@@ -4750,9 +4903,19 @@ def proformas():
     
     stats = stats[0] if stats else {'total': 0, 'en_attente': 0, 'acceptees': 0, 'converties': 0, 'total_montant': 0}
     
+    # 🔥 AJOUTER : Récupérer les actes et produits depuis Google Sheets
+    actes = sheets_helper.get_all_records('actes')
+    produits = sheets_helper.get_all_records('produits')
+    
+    # Filtrer par structure
+    actes_filtres = [a for a in actes if str(a.get('structure_id')) == str(structure_id)]
+    produits_filtres = [p for p in produits if str(p.get('structure_id')) == str(structure_id)]
+    
     return render_template('proformas/proformas.html', 
                          proformas=proformas,
-                         stats=stats)
+                         stats=stats,
+                         actes=actes_filtres,    # 🔥 PASSER LES ACTES
+                         produits=produits_filtres)  # 🔥 PASSER LES PRODUITS
 
 @app.route('/api/proformas', methods=['POST'])
 @login_required
