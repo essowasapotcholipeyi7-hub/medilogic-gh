@@ -70,10 +70,14 @@
                                                 <span class="badge bg-danger">Administrateur</span>
                                             {% elif user.role == 'medecin' %}
                                                 <span class="badge bg-primary">Médecin</span>
+                                            {% elif user.role == 'paramedical' %}
+                                                <span class="badge bg-warning text-dark">Paramédical</span>
                                             {% elif user.role == 'pharmacien' %}
                                                 <span class="badge bg-success">Pharmacien</span>
                                             {% elif user.role == 'caissier' %}
                                                 <span class="badge bg-info">Caissier</span>
+                                            {% elif user.role == 'secretaire' %}
+                                                <span class="badge bg-secondary">Secrétaire</span>
                                             {% else %}
                                                 <span class="badge bg-secondary">{{ user.role }}</span>
                                             {% endif %}
@@ -274,6 +278,7 @@
                             <option value="caissier">Caissier</option>
                             <option value="secretaire">Secretaire</option>
                             <option value="medecin">Médecin</option>
+                            <option value="paramedical">Paramédical</option>
                             <option value="pharmacien">Pharmacien</option>
                             <option value="admin">Administrateur</option>
                         </select>

@@ -165,17 +165,26 @@ def index():
         password = request.form.get('password')
         
         print("=" * 50)
-        print(f"TENTATIVE DE CONNEXION")
-        print(f"Email: {email}")
+        print(f"🔐 TENTATIVE DE CONNEXION")
+        print(f"📧 Email: {email}")
         print("=" * 50)
         
-        spreadsheet = sheets_helper.spreadsheet
-        all_worksheets = spreadsheet.worksheets()
+        try:
+            spreadsheet = sheets_helper.spreadsheet
+            all_worksheets = spreadsheet.worksheets()
+        except Exception as e:
+            print(f"❌ Erreur accès Google Sheets: {e}")
+            flash('Erreur de connexion à la base de données', 'danger')
+            return redirect(url_for('index'))
         
+        user_trouve = False
+        mdp_ok = False
+        
+        # ========== 1. RECHERCHE DANS LES FEUILLES UTILISATEURS ==========
         for worksheet in all_worksheets:
             title = worksheet.title
             if title.endswith('_users'):
-                print(f"Verification dans: {title}")
+                print(f"📂 Vérification dans: {title}")
                 
                 try:
                     row_count = len(worksheet.get_all_values())
@@ -187,12 +196,13 @@ def index():
                         continue
                         
                 except Exception as e:
-                    print(f"   Erreur lecture feuille: {e}")
+                    print(f"   ⚠️ Erreur lecture feuille: {e}")
                     continue
                 
                 for row in records:
                     if str(row.get('email')) == email:
-                        print(f"Utilisateur trouve dans {title}")
+                        user_trouve = True
+                        print(f"✅ Utilisateur trouvé dans {title}")
                         
                         # Vérifier si compte actif
                         statut = row.get('actif', 'oui')
@@ -202,21 +212,19 @@ def index():
                             return redirect(url_for('index'))
                         
                         if row.get('mot_de_passe') == hash_password(password):
-                            print("Mot de passe OK")
+                            mdp_ok = True
+                            print("✅ Mot de passe OK")
                             
                             # 🔥 METTRE À JOUR LA DERNIÈRE CONNEXION
                             try:
-                                # Trouver la ligne de l'utilisateur
                                 cell = worksheet.find(str(row.get('ID')), in_column=1)
                                 if cell:
                                     row_num = cell.row
                                     current_row = worksheet.row_values(row_num)
                                     
-                                    # Étendre si nécessaire
                                     while len(current_row) < 9:
                                         current_row.append('')
                                     
-                                    # Mettre à jour la dernière connexion (colonne I = index 8)
                                     date_connexion = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
                                     current_row[8] = date_connexion
                                     
@@ -234,63 +242,78 @@ def index():
                             structure = next((s for s in structures if str(s.get('ID')) == str(structure_id)), {})
                             
                             if structure.get('statut') == 'active':
+                                # 🔥 Récupérer le rôle
+                                role = row.get('role', 'caissier')
+                                
                                 session['user_id'] = row.get('ID')
                                 session['user_name'] = row.get('nom')
                                 session['structure_id'] = structure_id
                                 session['structure_nom'] = structure.get('nom')
                                 session['structure_email'] = structure.get('email', '')
-                                session['structure_logo'] = structure.get('logo_url', '')  # ← AJOUT
+                                session['structure_logo'] = structure.get('logo_url', '')
                                 session['structure_telephone'] = structure.get('telephone', '')
-                                session['is_admin'] = (row.get('role') == 'admin')
-                                print(f"✅ Connexion reussie")
+                                session['role'] = role  # 🔥 AJOUT DU RÔLE
+                                session['is_admin'] = (role == 'admin')  # 🔥 ADMIN SI ROLE = 'admin'
+                                
+                                print(f"✅ Connexion réussie pour {row.get('nom')} (rôle: {role})")
                                 flash(f'Bienvenue {row.get("nom")}', 'success')
                                 return redirect(url_for('dashboard'))
                             else:
                                 print("❌ Structure non active")
-                                flash('Structure non activee', 'warning')
+                                flash('Structure non activée', 'warning')
                                 return redirect(url_for('index'))
                         else:
                             print("❌ Mot de passe incorrect")
                             flash('Mot de passe incorrect', 'danger')
                             return redirect(url_for('index'))
         
-        # Vérifier aussi dans structures (admin global)
-        structures = sheets_helper.get_all_records('structures', use_prefix=False)
-        for structure in structures:
-            if structure.get('email') == email:
-                if structure.get('mot_de_passe') == hash_password(password):
-                    if structure.get('statut') == 'active':
-                        # 🔥 Aussi pour admin global
-                        try:
-                            sheet_structures = sheets_helper.spreadsheet.worksheet("structures")
-                            cell = sheet_structures.find(str(structure.get('ID')), in_column=1)
-                            if cell:
-                                row_num = cell.row
-                                current_row = sheet_structures.row_values(row_num)
-                                while len(current_row) < 13:
-                                    current_row.append('')
-                                current_row[12] = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-                                sheet_structures.update(range_name=f'A{row_num}:M{row_num}', values=[current_row])
-                        except:
-                            pass
-                        
-                        session['user_id'] = structure.get('ID')
-                        session['user_name'] = structure.get('nom')
-                        session['structure_id'] = structure.get('ID')
-                        session['structure_nom'] = structure.get('nom')
-                        session['structure_email'] = structure.get('email', '')
-                        session['structure_telephone'] = structure.get('telephone', '')
-                        session['is_admin'] = True
-                        flash(f'Bienvenue {structure.get("nom")}', 'success')
-                        return redirect(url_for('dashboard'))
+        # ========== 2. RECHERCHE DANS ADMIN GLOBAL ==========
+        if not mdp_ok:
+            structures = sheets_helper.get_all_records('structures', use_prefix=False)
+            for structure in structures:
+                if structure.get('email') == email:
+                    user_trouve = True
+                    if structure.get('mot_de_passe') == hash_password(password):
+                        mdp_ok = True
+                        if structure.get('statut') == 'active':
+                            # Mettre à jour la connexion admin
+                            try:
+                                sheet_structures = sheets_helper.spreadsheet.worksheet("structures")
+                                cell = sheet_structures.find(str(structure.get('ID')), in_column=1)
+                                if cell:
+                                    row_num = cell.row
+                                    current_row = sheet_structures.row_values(row_num)
+                                    while len(current_row) < 13:
+                                        current_row.append('')
+                                    current_row[12] = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+                                    sheet_structures.update(range_name=f'A{row_num}:M{row_num}', values=[current_row])
+                            except:
+                                pass
+                            
+                            session['user_id'] = structure.get('ID')
+                            session['user_name'] = structure.get('nom')
+                            session['structure_id'] = structure.get('ID')
+                            session['structure_nom'] = structure.get('nom')
+                            session['structure_email'] = structure.get('email', '')
+                            session['structure_telephone'] = structure.get('telephone', '')
+                            session['role'] = 'admin'
+                            session['is_admin'] = True
+                            
+                            flash(f'Bienvenue {structure.get("nom")}', 'success')
+                            return redirect(url_for('dashboard'))
+                        else:
+                            flash('Structure en attente d\'activation', 'warning')
+                            return redirect(url_for('index'))
                     else:
-                        flash('Structure en attente d\'activation', 'warning')
+                        flash('Mot de passe incorrect', 'danger')
                         return redirect(url_for('index'))
-                else:
-                    flash('Mot de passe incorrect', 'danger')
-                    return redirect(url_for('index'))
         
-        flash('Email non trouve', 'danger')
+        # ========== 3. GESTION DES ERREURS ==========
+        if not user_trouve:
+            flash('Email non trouvé', 'danger')
+        elif not mdp_ok:
+            flash('Mot de passe incorrect', 'danger')
+        
         return redirect(url_for('index'))
     
     return render_template('index.html')
@@ -5101,6 +5124,16 @@ def api_proformas_count():
     except Exception as e:
         print(f"❌ Erreur: {e}")
         return jsonify({'total': 0, 'en_attente': 0})
+@app.route('/consultation')
+@login_required
+def consultation():
+    """Page de consultation et prise en charge - Réservé aux admins, médecins et paramédicaux"""
+    # Vérifier les droits
+    if not session.get('is_admin') and session.get('role') not in ['medecin', 'paramedical']:
+        flash('Accès non autorisé. Réservé au personnel médical.', 'danger')
+        return redirect(url_for('dashboard'))
+    
+    return render_template('consultation.html')
 
 if __name__ == '__main__':
     # Récupère le port depuis la variable d'environnement ou utilise 5000 par défaut
