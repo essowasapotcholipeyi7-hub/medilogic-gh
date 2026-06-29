@@ -178,18 +178,20 @@
                                         <th>Type</th>
                                         <th>Detail</th>
                                         <th>Montant</th>
+                                        <th>Assurance principale</th>
+                                        <th>Assurance complementaire</th>
                                         <th>Vendeur</th>
                                         <th>Statut</th>
                                     </tr>
                                 </thead>
                                 <tbody id="ventesStatsList">
-                                    <tr><td colspan="9" class="text-center">Chargement...</td></tr>
+                                    <tr><td colspan="11" class="text-center">Chargement...</td></tr>
                                 </tbody>
                                 <tfoot class="table-light">
                                     <tr class="fw-bold">
                                         <td colspan="6" class="text-end">Total :</td>
                                         <td id="totalMontantFooter">0 FCFA</td>
-                                        <td colspan="2"></td>
+                                        <td colspan="4"></td>
                                     </tr>
                                 </tfoot>
                             </table>
@@ -198,101 +200,106 @@
                 </div>
             </div>
 
-<!-- ========== ONGLET ASSURANCES ========== -->
-<div class="tab-pane fade" id="assurances" role="tabpanel">
-    <div class="card">
-        <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
-            <h5><i class="fas fa-shield-alt"></i> Suivi des assurances</h5>
-            <div>
-                <button class="btn btn-light btn-sm me-2" onclick="genererFactures()">
-                    <i class="fas fa-file-invoice"></i> Generer factures
-                </button>
-                <button class="btn btn-light btn-sm" onclick="rafraichirFactures()">
-                    <i class="fas fa-sync-alt"></i> Rafraichir
-                </button>
-            </div>
-        </div>
-        <div class="card-body">
-            <!-- Filtres -->
-            <div class="filter-bar">
-                <div class="row g-2">
-                    <div class="col-md-4">
-                        <label class="form-label small">Selectionner le mois</label>
-                        <input type="month" id="factureMois" class="form-control form-control-sm">
+            <!-- ========== ONGLET ASSURANCES ========== -->
+            <div class="tab-pane fade" id="assurances" role="tabpanel">
+                <div class="card">
+                    <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                        <h5><i class="fas fa-shield-alt"></i> Suivi des assurances</h5>
+                        <div>
+                            <button class="btn btn-light btn-sm me-2" onclick="genererFactures()">
+                                <i class="fas fa-file-invoice"></i> Generer factures
+                            </button>
+                            <button class="btn btn-light btn-sm" onclick="rafraichirFactures()">
+                                <i class="fas fa-sync-alt"></i> Rafraichir
+                            </button>
+                        </div>
                     </div>
-                    <div class="col-md-4">
-                        <label class="form-label small">&nbsp;</label>
-                        <button class="btn btn-primary btn-sm w-100" onclick="chargerFactures()">
-                            <i class="fas fa-search"></i> Voir les factures
-                        </button>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label small">&nbsp;</label>
-                        <button class="btn btn-success btn-sm w-100" onclick="genererFactures()">
-                            <i class="fas fa-calculator"></i> Generer factures du mois
-                        </button>
-                    </div>
-                </div>
-                <div class="alert alert-info mt-3 mb-0 small">
-                    <i class="fas fa-info-circle"></i> Les factures sont generees automatiquement a partir des ventes (actes + pharmacie) des patients assures.
-                    Selectionnez un mois et cliquez sur "Generer factures du mois" pour creer/actualiser les factures.
-                </div>
-            </div>
+                    <div class="card-body">
+                        <!-- Filtres -->
+                        <div class="filter-bar">
+                            <div class="row g-2">
+                                <div class="col-md-4">
+                                    <label class="form-label small">Selectionner le mois</label>
+                                    <input type="month" id="factureMois" class="form-control form-control-sm">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small">&nbsp;</label>
+                                    <button class="btn btn-primary btn-sm w-100" onclick="chargerFactures()">
+                                        <i class="fas fa-search"></i> Voir les factures
+                                    </button>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small">&nbsp;</label>
+                                    <button class="btn btn-success btn-sm w-100" onclick="genererFactures()">
+                                        <i class="fas fa-calculator"></i> Generer factures du mois
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="alert alert-info mt-3 mb-0 small">
+                                <i class="fas fa-info-circle"></i> Les factures sont generees automatiquement a partir des ventes (actes + pharmacie) des patients assures.
+                                Selectionnez un mois et cliquez sur "Generer factures du mois" pour creer/actualiser les factures.
+                            </div>
+                        </div>
 
-<!-- Cartes recap assurances -->
-<div class="row g-3 mb-4">
-    <div class="col-md-4">
-        <div class="card bg-warning bg-opacity-10 border-0">
-            <div class="card-body text-center">
-                <h4 class="text-warning" id="totalAFacturer">0 FCFA</h4>
-                <small class="text-muted">A facturer</small>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-4">
-        <div class="card bg-success bg-opacity-10 border-0">
-            <div class="card-body text-center">
-                <h4 class="text-success" id="totalDejaPaye">0 FCFA</h4>
-                <small class="text-muted">Deja rembourse</small>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-4">
-        <div class="card bg-danger bg-opacity-10 border-0">
-            <div class="card-body text-center">
-                <h4 class="text-danger" id="totalRestantDu">0 FCFA</h4>
-                <small class="text-muted">Reste a percevoir</small>
-            </div>
-        </div>
-    </div>
-</div>
-            <!-- Tableau factures -->
-            <div class="table-responsive">
-                <table class="table table-hover" id="facturesTable">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Mois</th>
-                            <th>Assurance</th>
-                            <th>Montant total</th>
-                            <th>Rembourse</th>
-                            <th>Reste</th>
-                            <th>Statut</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="facturesList">
-                        <td><td colspan="7" class="text-center">Selectionnez un mois</td</tr
-                    </tbody>
-                    <tfoot class="table-light">
-                        <tr class="fw-bold">
-                            <td colspan="2" class="text-end">Total :</td>
-                            <td id="totalFacturesFooter">0 FCFA</td>
-                            <td id="totalRembourseFooter">0 FCFA</td>
-                            <td id="totalResteFooter">0 FCFA</td>
-                            <td colspan="2"></td>
-                        </tr>
-                    </tfoot>
-                </table>
+                        <!-- Cartes recap assurances -->
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-4">
+                                <div class="card bg-warning bg-opacity-10 border-0">
+                                    <div class="card-body text-center">
+                                        <h4 class="text-warning" id="totalAFacturer">0 FCFA</h4>
+                                        <small class="text-muted">A facturer</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card bg-success bg-opacity-10 border-0">
+                                    <div class="card-body text-center">
+                                        <h4 class="text-success" id="totalDejaPaye">0 FCFA</h4>
+                                        <small class="text-muted">Deja rembourse</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card bg-danger bg-opacity-10 border-0">
+                                    <div class="card-body text-center">
+                                        <h4 class="text-danger" id="totalRestantDu">0 FCFA</h4>
+                                        <small class="text-muted">Reste a percevoir</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 🔥 TABLEAU FACTURES AVEC TYPE ASSURANCE -->
+                        <div class="table-responsive">
+                            <table class="table table-hover" id="facturesTable">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Mois</th>
+                                        <th>Assurance</th>
+                                        <th>Type</th>
+                                        <th>Montant total</th>
+                                        <th>Rembourse</th>
+                                        <th>Reste</th>
+                                        <th>Statut</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="facturesList">
+                                    <tr><td colspan="8" class="text-center">Selectionnez un mois</td></tr>
+                                </tbody>
+                                <tfoot class="table-light">
+                                    <tr class="fw-bold">
+                                        <td colspan="3" class="text-end">Total :</td>
+                                        <td id="totalFacturesFooter">0 FCFA</td>
+                                        <td id="totalRembourseFooter">0 FCFA</td>
+                                        <td id="totalResteFooter">0 FCFA</td>
+                                        <td colspan="2"></td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -346,12 +353,8 @@ let toutesLesVentes = [];
 
 // ========== ONGLET VENTES ==========
 function chargerVentes() {
-    // Vérifier que l'élément existe avant d'afficher le loader
     const ventesList = document.getElementById('ventesStatsList');
-    if (!ventesList) {
-        console.error("Element ventesStatsList non trouve");
-        return;
-    }
+    if (!ventesList) return;
     
     fetch('/api/ventes/all')
         .then(response => response.json())
@@ -360,7 +363,7 @@ function chargerVentes() {
             toutesLesVentes = ventes;
             
             if (ventes.length === 0) {
-                if (ventesList) ventesList.innerHTML = '<tr><td colspan="9" class="text-center">Aucune vente enregistree</td</tr';
+                ventesList.innerHTML = '<tr><td colspan="11" class="text-center">Aucune vente enregistree</td></tr>';
                 return;
             }
             
@@ -369,16 +372,13 @@ function chargerVentes() {
         })
         .catch(error => {
             console.error('Erreur:', error);
-            if (ventesList) ventesList.innerHTML = '<td><td colspan="9" class="text-center text-danger">Erreur de chargement</td</tr';
+            ventesList.innerHTML = '<tr><td colspan="11" class="text-center text-danger">Erreur de chargement</td></tr>';
         });
 }
 
 function afficherVentes(ventes) {
     const tbody = document.getElementById('ventesStatsList');
-    if (!tbody) {
-        console.error("Element ventesStatsList non trouve");
-        return;
-    }
+    if (!tbody) return;
     tbody.innerHTML = '';
     
     let totalMontant = 0;
@@ -386,9 +386,6 @@ function afficherVentes(ventes) {
     let totalPharma = 0;
     
     ventes.forEach(vente => {
-        // DEBUG - Afficher le vendeur dans la console
-        console.log("Vendeur pour vente ID", vente.ID, ":", vente.created_by_nom, "| Type:", vente.type);
-        
         const montant = vente.net_a_payer || 0;
         totalMontant += montant;
         
@@ -424,31 +421,35 @@ function afficherVentes(ventes) {
         row.insertCell(5).innerHTML = vente.detail || '-';
         row.insertCell(6).innerHTML = Math.round(montant).toLocaleString('fr-FR') + ' FCFA';
         
-        // Colonne Vendeur (index 7)
-        const vendeurValue = vente.created_by_nom || vente.vendeur || '-';
-        console.log("   -> Affichage vendeur:", vendeurValue);
-        row.insertCell(7).innerHTML = vendeurValue;
+        // 🔥 Assurance principale (index 7)
+        const assurance1 = vente.assurance_nom || vente.type_assurance || 'Non assure';
+        let assurance1Display = assurance1;
+        if (assurance1 === 'amu_cnss') assurance1Display = 'AMU-CNSS';
+        else if (assurance1 === 'amu_inam') assurance1Display = 'AMU-INAM';
+        row.insertCell(7).innerHTML = assurance1Display + ' (' + (vente.taux_assurance || 0) + '%)';
         
-        const statutCell = row.insertCell(8);
+        // 🔥 Assurance complementaire (index 8)
+        const assurance2 = vente.assurance2_nom || '';
+        const taux2 = vente.taux_assurance2 || 0;
+        if (assurance2 && assurance2 !== '' && assurance2 !== 'Aucune') {
+            row.insertCell(8).innerHTML = assurance2 + ' (' + taux2 + '%)';
+        } else {
+            row.insertCell(8).innerHTML = '<span class="text-muted">-</span>';
+        }
+        
+        row.insertCell(9).innerHTML = vente.created_by_nom || '-';
+        
+        const statutCell = row.insertCell(10);
         const statut = vente.statut || 'validee';
         statutCell.innerHTML = (statut === 'annulee') ? '<span class="badge bg-danger">Annulee</span>' : '<span class="badge bg-success">Validee</span>';
     });
     
-    // Mise à jour des totaux...
     const totalMontantFooter = document.getElementById('totalMontantFooter');
-    const totalActesEl = document.getElementById('totalActes');
-    const totalPharmaEl = document.getElementById('totalPharma');
-    const totalCAEl = document.getElementById('totalCA');
-    const totalVentesEl = document.getElementById('totalVentes');
-    const ventesResultCountEl = document.getElementById('ventesResultCount');
-    
-    if (totalMontantFooter) totalMontantFooter.innerHTML = Math.round(totalMontant).toLocaleString('fr-FR') + ' FCFA';
-    if (totalActesEl) totalActesEl.innerHTML = totalActes;
-    if (totalPharmaEl) totalPharmaEl.innerHTML = totalPharma;
-    if (totalCAEl) totalCAEl.innerHTML = Math.round(totalMontant).toLocaleString('fr-FR') + ' FCFA';
-    if (totalVentesEl) totalVentesEl.innerHTML = ventes.length;
-    if (ventesResultCountEl) ventesResultCountEl.innerHTML = ventes.length;
+    if (totalMontantFooter) {
+        totalMontantFooter.innerHTML = Math.round(totalMontant).toLocaleString('fr-FR') + ' FCFA';
+    }
 }
+
 function updateStats(ventes) {
     let totalMontant = 0;
     let totalActes = 0;
@@ -464,15 +465,11 @@ function updateStats(ventes) {
     const totalCAEl = document.getElementById('totalCA');
     const totalActesEl = document.getElementById('totalActes');
     const totalPharmaEl = document.getElementById('totalPharma');
-    const ventesResultCountEl = document.getElementById('ventesResultCount');
-    const totalMontantFooter = document.getElementById('totalMontantFooter');
     
     if (totalVentesEl) totalVentesEl.innerHTML = ventes.length;
     if (totalCAEl) totalCAEl.innerHTML = Math.round(totalMontant).toLocaleString('fr-FR') + ' FCFA';
     if (totalActesEl) totalActesEl.innerHTML = totalActes;
     if (totalPharmaEl) totalPharmaEl.innerHTML = totalPharma;
-    if (ventesResultCountEl) ventesResultCountEl.innerHTML = ventes.length;
-    if (totalMontantFooter) totalMontantFooter.innerHTML = Math.round(totalMontant).toLocaleString('fr-FR') + ' FCFA';
 }
 
 function appliquerFiltres() {
@@ -499,33 +496,23 @@ function appliquerFiltres() {
         const type = vente.type;
         const statutValue = vente.statut || 'validee';
         
-        // Filtre date
         if (dateDebut && dateFin && dateVente) {
             if (dateVente < dateDebut || dateVente > dateFin) return false;
         }
-        
-        // Filtre heure
         if (heureDebut && heureFin && heureVente) {
             if (heureVente < heureDebut || heureVente > heureFin) return false;
         }
-        
-        // Filtre patient
         if (filtrePatient && !patient.includes(filtrePatient)) return false;
-        
-        // Filtre vendeur
         if (filtreVendeur && !vendeur.includes(filtreVendeur)) return false;
         
-        // Filtre type - CORRECTION ICI
         if (filtreType !== 'tous') {
             if (filtreType === 'pharmacie') {
-                // Accepter 'pharmacie' ou 'pharma'
                 if (type !== 'pharmacie' && type !== 'pharma') return false;
             } else if (type !== filtreType) {
                 return false;
             }
         }
         
-        // Filtre statut - CORRECTION ICI
         if (filtreStatut !== 'tous') {
             if (statutValue !== filtreStatut) return false;
         }
@@ -535,22 +522,15 @@ function appliquerFiltres() {
     
     afficherVentes(ventesFiltrees);
 }
+
 function resetFiltres() {
-    const dateDebut = document.getElementById('filtreDateDebut');
-    const dateFin = document.getElementById('filtreDateFin');
-    const heureDebut = document.getElementById('filtreHeureDebut');
-    const heureFin = document.getElementById('filtreHeureFin');
-    const filtrePatient = document.getElementById('filtrePatient');
-    const filtreVendeur = document.getElementById('filtreVendeur');
+    const fields = ['filtreDateDebut', 'filtreDateFin', 'filtreHeureDebut', 'filtreHeureFin', 'filtrePatient', 'filtreVendeur'];
+    fields.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
     const filtreType = document.getElementById('filtreType');
     const filtreStatut = document.getElementById('filtreStatut');
-    
-    if (dateDebut) dateDebut.value = '';
-    if (dateFin) dateFin.value = '';
-    if (heureDebut) heureDebut.value = '';
-    if (heureFin) heureFin.value = '';
-    if (filtrePatient) filtrePatient.value = '';
-    if (filtreVendeur) filtreVendeur.value = '';
     if (filtreType) filtreType.value = 'tous';
     if (filtreStatut) filtreStatut.value = 'tous';
     
@@ -562,12 +542,12 @@ function resetFiltres() {
 
 function exporterCSV() {
     const rows = document.querySelectorAll('#ventesStatsList tr');
-    let csvContent = "ID;Date;Heure;Patient;Type;Detail;Montant;Vendeur;Statut\n";
+    let csvContent = "ID;Date;Heure;Patient;Type;Detail;Montant;Assurance principale;Assurance complementaire;Vendeur;Statut\n";
     
     rows.forEach(row => {
         const cells = row.cells;
         if (cells.length > 1 && cells[0].innerText !== 'Chargement...') {
-            csvContent += `"${cells[0].innerText}";"${cells[1].innerText}";"${cells[2].innerText}";"${cells[3].innerText}";"${cells[4].innerText}";"${cells[5].innerText}";"${cells[6].innerText}";"${cells[7].innerText}";"${cells[8].innerText}"\n`;
+            csvContent += `"${cells[0].innerText}";"${cells[1].innerText}";"${cells[2].innerText}";"${cells[3].innerText}";"${cells[4].innerText}";"${cells[5].innerText}";"${cells[6].innerText}";"${cells[7].innerText}";"${cells[8].innerText}";"${cells[9].innerText}";"${cells[10].innerText}"\n`;
         }
     });
     
@@ -579,18 +559,7 @@ function exporterCSV() {
     URL.revokeObjectURL(link.href);
 }
 
-// Initialisation
-document.addEventListener('DOMContentLoaded', function() {
-    const factureMois = document.getElementById('factureMois');
-    if (factureMois) {
-        const now = new Date();
-        const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-        factureMois.value = currentMonth;
-    }
-    chargerVentes();
-});
-
-// ========== ASSURANCES ==========
+// ========== ASSURANCES AVEC TYPE ==========
 function genererFactures() {
     const moisInput = document.getElementById('factureMois');
     if (!moisInput) return;
@@ -651,6 +620,11 @@ function chargerFactures() {
                 if (f.assurance === 'amu_cnss') assuranceText = 'AMU-CNSS';
                 if (f.assurance === 'amu_inam') assuranceText = 'AMU-INAM';
                 
+                // 🔥 TYPE D'ASSURANCE
+                const typeAssurance = f.type_assurance || 'principale';
+                const typeLabel = typeAssurance === 'principale' ? 'Principale' : 'Complémentaire';
+                const typeBadge = typeAssurance === 'principale' ? 'bg-primary' : 'bg-info';
+                
                 let statutText = '', statutClass = '';
                 if (f.statut === 'en_attente') { statutText = 'En attente'; statutClass = 'bg-warning'; }
                 else if (f.statut === 'payee') { statutText = 'Payee'; statutClass = 'bg-success'; }
@@ -659,12 +633,13 @@ function chargerFactures() {
                 const row = tbody.insertRow();
                 row.insertCell(0).innerHTML = f.mois_reference;
                 row.insertCell(1).innerHTML = assuranceText;
-                row.insertCell(2).innerHTML = Math.round(montantTotal).toLocaleString('fr-FR') + ' FCFA';
-                row.insertCell(3).innerHTML = Math.round(montantRembourse).toLocaleString('fr-FR') + ' FCFA';
-                row.insertCell(4).innerHTML = '<span class="text-danger">' + Math.round(reste).toLocaleString('fr-FR') + ' FCFA</span>';
-                row.insertCell(5).innerHTML = `<span class="badge ${statutClass}">${statutText}</span>`;
+                row.insertCell(2).innerHTML = `<span class="badge ${typeBadge}">${typeLabel}</span>`;
+                row.insertCell(3).innerHTML = Math.round(montantTotal).toLocaleString('fr-FR') + ' FCFA';
+                row.insertCell(4).innerHTML = Math.round(montantRembourse).toLocaleString('fr-FR') + ' FCFA';
+                row.insertCell(5).innerHTML = '<span class="text-danger">' + Math.round(reste).toLocaleString('fr-FR') + ' FCFA</span>';
+                row.insertCell(6).innerHTML = `<span class="badge ${statutClass}">${statutText}</span>`;
                 
-                const actionCell = row.insertCell(6);
+                const actionCell = row.insertCell(7);
                 if (f.statut !== 'payee') {
                     actionCell.innerHTML = `<button class="btn btn-sm btn-success" onclick='showPaiementModal(${f.id}, "${assuranceText}", "${f.mois_reference}", ${montantTotal}, ${montantRembourse})'>Encaisser</button>`;
                 } else {
@@ -736,5 +711,16 @@ function enregistrerPaiement() {
 function rafraichirFactures() {
     chargerFactures();
 }
+
+// ========== INITIALISATION ==========
+document.addEventListener('DOMContentLoaded', function() {
+    const factureMois = document.getElementById('factureMois');
+    if (factureMois) {
+        const now = new Date();
+        const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        factureMois.value = currentMonth;
+    }
+    chargerVentes();
+});
 </script>
 {% endblock %}

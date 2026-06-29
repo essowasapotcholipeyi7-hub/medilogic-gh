@@ -4,7 +4,6 @@
 
 {% block extra_css %}
 <style>
-    /* Cartes statistiques modernes */
     .stat-card {
         transition: all 0.3s ease;
         cursor: pointer;
@@ -42,8 +41,6 @@
         color: #adb5bd;
         margin-top: 5px;
     }
-    
-    /* Liste des activités */
     .activity-item {
         transition: all 0.2s ease;
         border-left: 3px solid transparent;
@@ -53,8 +50,6 @@
         border-left-color: #667eea;
         transform: translateX(5px);
     }
-    
-    /* Boutons d'action rapide */
     .quick-action-btn {
         transition: all 0.3s ease;
         border-radius: 15px !important;
@@ -63,21 +58,35 @@
         transform: translateY(-5px);
         box-shadow: 0 10px 25px rgba(0,0,0,0.15);
     }
-    
-    /* Badge personnalisé */
     .badge-ca {
         font-size: 0.7rem;
         padding: 4px 8px;
         border-radius: 20px;
     }
-    
-    /* Animation loader */
     @keyframes pulse {
         0%, 100% { opacity: 1; }
         50% { opacity: 0.5; }
     }
     .loading-pulse {
         animation: pulse 1.5s ease-in-out infinite;
+    }
+    .bg-gradient-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    .rounded-top-4 {
+        border-top-left-radius: 1rem !important;
+        border-top-right-radius: 1rem !important;
+    }
+    .btn-outline-secondary:hover {
+        background-color: #6c757d;
+        color: white;
+    }
+    .list-group-item {
+        transition: all 0.2s ease;
+    }
+    .list-group-item:hover {
+        background-color: #f8f9fa;
+        transform: translateX(2px);
     }
 </style>
 {% endblock %}
@@ -90,9 +99,9 @@
 
     <!-- Contenu principal -->
     <div class="col-md-9">
-        <!-- 5 cartes statistiques modernes -->
+        <!-- 7 cartes statistiques modernes -->
         <div class="row g-3 mb-4">
-            <div class="col-md-2 col-6">
+            <div class="col-md-3 col-6">
                 <div class="card stat-card shadow-sm">
                     <div class="card-body text-center">
                         <div class="stat-icon bg-primary bg-opacity-10 mx-auto">
@@ -103,7 +112,7 @@
                     </div>
                 </div>
             </div>
-            <div class="col-md-2 col-6">
+            <div class="col-md-3 col-6">
                 <div class="card stat-card shadow-sm">
                     <div class="card-body text-center">
                         <div class="stat-icon bg-success bg-opacity-10 mx-auto">
@@ -115,7 +124,7 @@
                     </div>
                 </div>
             </div>
-            <div class="col-md-2 col-6">
+            <div class="col-md-3 col-6">
                 <div class="card stat-card shadow-sm">
                     <div class="card-body text-center">
                         <div class="stat-icon bg-info bg-opacity-10 mx-auto">
@@ -139,15 +148,43 @@
                     </div>
                 </div>
             </div>
-            <div class="col-md-3 col-6">
-                <div class="card stat-card shadow-sm">
+        </div>
+
+        <!-- 🔥 NOUVELLE LIGNE : STATISTIQUES DES ASSURANCES -->
+        <div class="row g-3 mb-4">
+            <div class="col-md-4 col-6">
+                <div class="card stat-card shadow-sm border border-success">
+                    <div class="card-body text-center">
+                        <div class="stat-icon bg-success bg-opacity-10 mx-auto">
+                            <i class="fas fa-shield-alt fa-2x text-success"></i>
+                        </div>
+                        <div class="stat-value text-success" id="totalPriseEnCharge">0</div>
+                        <div class="stat-label">Prise en charge</div>
+                        <div class="stat-sub">Assurance principale</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 col-6">
+                <div class="card stat-card shadow-sm border border-info">
+                    <div class="card-body text-center">
+                        <div class="stat-icon bg-info bg-opacity-10 mx-auto">
+                            <i class="fas fa-plus-circle fa-2x text-info"></i>
+                        </div>
+                        <div class="stat-value text-info" id="totalPriseEnCharge2">0</div>
+                        <div class="stat-label">Prise en charge</div>
+                        <div class="stat-sub">Assurance complémentaire</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 col-6">
+                <div class="card stat-card shadow-sm border border-danger">
                     <div class="card-body text-center">
                         <div class="stat-icon bg-danger bg-opacity-10 mx-auto">
                             <i class="fas fa-chart-line fa-2x text-danger"></i>
                         </div>
                         <div class="stat-value text-danger" id="caBrut">0</div>
                         <div class="stat-label">Total facturé</div>
-                        <div class="stat-sub">Avec assurance</div>
+                        <div class="stat-sub">Avec assurances</div>
                     </div>
                 </div>
             </div>
@@ -278,6 +315,7 @@ function printDocument(action) {
     window.open(url, '_blank');
     bootstrap.Modal.getInstance(document.getElementById('printModal')).hide();
 }
+
 // ========== CHARGEMENT DES DONNÉES DU DASHBOARD ==========
 function chargerDashboard() {
     // Charger le nombre de patients
@@ -298,6 +336,15 @@ function chargerDashboard() {
             document.getElementById('caBrut').innerHTML = (data.ca_brut_today || 0).toLocaleString();
         })
         .catch(err => console.error('Erreur stats:', err));
+    
+    // 🔥 Charger les statistiques des assurances
+    fetch('/api/assurances/stats')
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('totalPriseEnCharge').innerHTML = (data.total_prise_en_charge || 0).toLocaleString();
+            document.getElementById('totalPriseEnCharge2').innerHTML = (data.total_prise_en_charge2 || 0).toLocaleString();
+        })
+        .catch(err => console.error('Erreur assurances:', err));
     
     // Charger les activités récentes
     fetch('/api/activites/recentes')
@@ -368,29 +415,4 @@ document.addEventListener('DOMContentLoaded', function() {
 // Rafraîchissement automatique toutes les 30 secondes
 setInterval(chargerDashboard, 30000);
 </script>
-
-<style>
-.bg-gradient-primary {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-}
-
-.rounded-top-4 {
-    border-top-left-radius: 1rem !important;
-    border-top-right-radius: 1rem !important;
-}
-
-.btn-outline-secondary:hover {
-    background-color: #6c757d;
-    color: white;
-}
-
-.list-group-item {
-    transition: all 0.2s ease;
-}
-
-.list-group-item:hover {
-    background-color: #f8f9fa;
-    transform: translateX(2px);
-}
-</style>
 {% endblock %}

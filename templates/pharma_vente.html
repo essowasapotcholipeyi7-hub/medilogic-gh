@@ -23,24 +23,27 @@
     </div>
 
     <div class="col-md-9">
-        <!-- Info patient sélectionné -->
-        <div class="alert alert-info" id="patientInfo" style="display:none;">
-            <div class="row align-items-center">
-                <div class="col-md-5">
-                    <strong><i class="fas fa-user"></i> Patient :</strong> <span id="selectedPatientName"></span>
-                </div>
-                <div class="col-md-3">
-                    <strong><i class="fas fa-shield-alt"></i> Assurance :</strong> <span id="selectedAssurance"></span>
-                </div>
-                <div class="col-md-4">
-                    <strong><i class="fas fa-percent"></i> Taux :</strong> <span id="selectedTaux"></span>%
-                    <button class="btn btn-sm btn-warning float-end" onclick="changePatient()">
-                        <i class="fas fa-exchange-alt"></i> Changer
-                    </button>
-                </div>
-            </div>
+<!-- Info patient sélectionné -->
+<div class="alert alert-info" id="patientInfo" style="display:none;">
+    <div class="row align-items-center">
+        <div class="col-md-3">
+            <strong><i class="fas fa-user"></i> Patient :</strong> <span id="selectedPatientName"></span>
         </div>
-
+        <div class="col-md-3">
+            <strong><i class="fas fa-shield-alt"></i> Assurance :</strong> <span id="selectedAssurance"></span> (<span id="selectedTaux"></span>%)
+        </div>
+        <div class="col-md-4">
+            <strong><i class="fas fa-plus-circle"></i> CAC :</strong> 
+            <span id="selectedAssurance2Display">Aucune</span> (<span id="selectedTaux2Display">0%</span>)
+            <span class="badge bg-success ms-1" id="cacActiveBadge" style="display:none;">Active</span>
+        </div>
+        <div class="col-md-2 text-end">
+            <button class="btn btn-sm btn-warning" onclick="changePatient()">
+                <i class="fas fa-exchange-alt"></i> Changer
+            </button>
+        </div>
+    </div>
+</div>
         <!-- Message si aucun patient sélectionné -->
         <div class="alert alert-warning" id="noPatientAlert">
             <i class="fas fa-exclamation-triangle"></i> 
@@ -144,7 +147,7 @@
                             </tr>
                         </thead>
                         <tbody id="panierBody">
-                            <tr><td colspan="5" class="text-center">Aucun produit dans le panier</td</tr
+                            <tr><td colspan="5" class="text-center">Aucun produit dans le panier</td></tr>
                         </tbody>
                         <tfoot class="table-light">
                             <tr>
@@ -157,6 +160,11 @@
                                 <th id="priseEnCharge" class="text-end text-success">0 FCFA</th>
                                 <th></th>
                             </tr>
+                            <tr id="priseEnCharge2Row" style="display:none;">
+                                <th colspan="3" class="text-end text-info">Prise en charge complémentaire :</th>
+                                <th id="priseEnCharge2" class="text-end text-info">0 FCFA</th>
+                                <th></th>
+                            </tr>
                             <tr>
                                 <th colspan="3" class="text-end text-danger">À payer par le patient :</th>
                                 <th id="netAPayer" class="text-end text-danger">0 FCFA</th>
@@ -165,6 +173,46 @@
                         </tfoot>
                     </table>
                 </div>
+
+<!-- ===== ASSURANCE COMPLÉMENTAIRE (TOGGLE) ===== -->
+<div class="row mt-2">
+    <div class="col-md-12">
+        <div class="form-check form-switch d-flex align-items-center gap-3">
+            <input class="form-check-input" type="checkbox" id="toggleAssurance2" 
+                   style="width: 50px; height: 25px; cursor: pointer;"
+                   onchange="toggleAssuranceComplementaire()">
+            <label class="form-check-label fw-semibold" for="toggleAssurance2" id="labelAssurance2">
+                <i class="fas fa-plus-circle text-success"></i> 
+                Assurance complémentaire : <span id="assurance2NomDisplay">Aucune</span>
+                <span class="badge bg-info" id="assurance2TauxDisplay">0%</span>
+            </label>
+            <!-- Champ pour modifier temporairement le taux -->
+            <div id="assurance2TauxEdit" style="display:none;" class="ms-3">
+                <div class="input-group input-group-sm" style="width: 150px;">
+                    <span class="input-group-text"><i class="fas fa-edit"></i></span>
+                    <input type="number" id="assurance2TauxTemp" class="form-control form-control-sm" 
+                           value="0" min="0" max="100" step="1"
+                           placeholder="Taux %" style="width: 70px;">
+                    <button class="btn btn-sm btn-outline-success" onclick="appliquerTauxTemp()">
+                        <i class="fas fa-check"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="resetTauxTemp()">
+                        <i class="fas fa-undo"></i>
+                    </button>
+                </div>
+                <small class="text-muted d-block mt-1">
+                    <i class="fas fa-info-circle"></i> Taux par défaut: <span id="assurance2TauxDefaut">0</span>%
+                    <span class="badge bg-warning text-dark ms-1" id="tauxTempBadge" style="display:none;">Modifié</span>
+                </small>
+            </div>
+        </div>
+        <div class="small text-muted mt-1" id="assurance2Info">
+            <i class="fas fa-info-circle"></i> 
+            L'assurance complémentaire s'applique sur le reste à charge après l'assurance principale.
+        </div>
+    </div>
+</div>
+
 
                 <div class="row mt-3">
                     <div class="col-md-3">
@@ -232,45 +280,35 @@
 </div>
 
 <style>
-/* Styles pour le panier */
 #panierTable th,
 #panierTable td {
     vertical-align: middle !important;
     padding: 12px 8px !important;
 }
-
 #panierTable .form-control-sm {
     font-size: 0.875rem;
     padding: 0.25rem 0.5rem;
 }
-
 #panierTable .input-group {
     flex-wrap: nowrap;
 }
-
 #panierTable .btn-sm {
     padding: 0.25rem 0.5rem;
     font-size: 0.75rem;
 }
-
-/* Style pour les totaux */
 #panierTable tfoot td,
 #panierTable tfoot th {
     font-size: 1rem;
     padding: 10px 8px !important;
 }
-
-/* Responsive pour mobile */
 @media (max-width: 768px) {
     #panierTable {
         font-size: 0.8rem;
     }
-    
     #panierTable .form-control-sm {
         width: 60px !important;
         font-size: 0.75rem;
     }
-    
     #panierTable .btn-sm {
         padding: 0.2rem 0.35rem;
         min-width: 25px;
@@ -285,8 +323,15 @@ let patientTaux = 0;
 let patientName = '';
 let produitsList = [];
 let patientAssurance = '';
+let patientAssurance2 = '';
+let patientTaux2 = 0;
 
-// Fonctions de progression
+// 🔥 NOUVELLES VARIABLES POUR LE TAUX TEMPORAIRE
+let patientTaux2Original = 0;
+let tauxTempModifie = false;
+let tauxTempValeur = 0;
+
+// ========== PROGRESS ==========
 function showProgress(title, message) {
     document.getElementById('progressTitle').innerText = title || 'Traitement en cours...';
     document.getElementById('progressMessage').innerHTML = message || 'Veuillez patienter';
@@ -307,35 +352,139 @@ function hideProgress() {
     if (modal) modal.hide();
 }
 
+// ========== GESTION PATIENT ==========
+function checkSelectedPatient() {
+    patientId = null;
+    patientTaux = 0;
+    patientName = '';
+    patientAssurance = '';
+    patientAssurance2 = '';
+    patientTaux2 = 0;
+    
+    patientId = sessionStorage.getItem('selectedPatientId');
+    patientName = sessionStorage.getItem('selectedPatientName');
+    patientAssurance = sessionStorage.getItem('selectedPatientAssurance');
+    let taux = sessionStorage.getItem('selectedPatientTaux');
+    patientAssurance2 = sessionStorage.getItem('selectedPatientAssurance2') || '';
+    patientTaux2 = parseFloat(sessionStorage.getItem('selectedPatientTaux2')) || 0;
+    
+    if (!patientId || patientId === 'null' || patientId === 'undefined') {
+        patientId = localStorage.getItem('selectedPatientId');
+        patientName = localStorage.getItem('selectedPatientName');
+        patientAssurance = localStorage.getItem('selectedPatientAssurance');
+        taux = localStorage.getItem('selectedPatientTaux');
+        patientAssurance2 = localStorage.getItem('selectedPatientAssurance2') || '';
+        patientTaux2 = parseFloat(localStorage.getItem('selectedPatientTaux2')) || 0;
+    }
+    
+    if (patientId && patientId !== 'null' && patientId !== 'undefined' && patientId !== '') {
+        patientTaux = parseFloat(taux) || 0;
+        document.getElementById('selectedPatientName').innerText = patientName || 'Patient';
+        
+        let assuranceText = 'Non assuré';
+        if (patientAssurance === 'amu_cnss') assuranceText = 'AMU-CNSS';
+        else if (patientAssurance === 'amu_inam') assuranceText = 'AMU-INAM';
+        else if (patientAssurance && patientAssurance !== 'non_assure') assuranceText = patientAssurance;
+        
+        document.getElementById('selectedAssurance').innerHTML = assuranceText;
+        document.getElementById('selectedTaux').innerHTML = patientTaux;
+        
+        // 🔥 AFFICHER L'ASSURANCE COMPLÉMENTAIRE
+        patientAssurance2 = sessionStorage.getItem('selectedPatientAssurance2') || '';
+        patientTaux2 = parseFloat(sessionStorage.getItem('selectedPatientTaux2')) || 0;
+        patientTaux2Original = patientTaux2; // Sauvegarder la valeur originale
+        
+        const assurance2Display = document.getElementById('selectedAssurance2Display');
+        const taux2Display = document.getElementById('selectedTaux2Display');
+        const cacBadge = document.getElementById('cacActiveBadge');
+        
+        if (assurance2Display) {
+            if (patientAssurance2 && patientAssurance2 !== '' && patientAssurance2 !== 'Aucune' && patientTaux2 > 0) {
+                assurance2Display.textContent = patientAssurance2;
+                if (taux2Display) taux2Display.textContent = patientTaux2 + '%';
+                if (cacBadge) cacBadge.style.display = 'inline-block';
+            } else {
+                assurance2Display.textContent = 'Aucune';
+                if (taux2Display) taux2Display.textContent = '0%';
+                if (cacBadge) cacBadge.style.display = 'none';
+            }
+        }
+        
+        // 🔥 Initialiser le toggle
+        checkAssuranceComplementaire();
+        
+        const tauxVenteInput = document.getElementById('tauxVente');
+        if (tauxVenteInput) {
+            tauxVenteInput.value = patientTaux;
+        }
+        
+        document.getElementById('patientInfo').style.display = 'block';
+        document.getElementById('noPatientAlert').style.display = 'none';
+        
+        console.log('Patient chargé:', { patientId, patientName, patientTaux, patientAssurance2, patientTaux2 });
+    } else {
+        document.getElementById('patientInfo').style.display = 'none';
+        document.getElementById('noPatientAlert').style.display = 'block';
+        document.getElementById('finaliserBtn').disabled = true;
+        console.log('Aucun patient sélectionné');
+    }
+}
+
+function changePatient() {
+    window.location.href = "/patients";
+}
+
 // ========== CHARGEMENT DES PRODUITS ==========
 function chargerProduits() {
-    showLoader();
+    console.log('🔄 Début chargement produits...');
+    
+    const select = document.getElementById('produitSelect');
+    if (!select) {
+        console.error('❌ Select non trouvé !');
+        return;
+    }
     
     fetch('/api/produits')
         .then(response => response.json())
         .then(data => {
-            produitsList = data;
-            const select = document.getElementById('produitSelect');
-            select.innerHTML = '<option value="">-- Choisir un produit --</option>';
+            console.log('📊 Produits reçus:', data.length);
+            produitsList = data || [];
             
-            if (data && data.length > 0) {
-                data.forEach(p => {
+            // VIDER ET REMPLIR LE SELECT
+            select.innerHTML = '';
+            
+            const defaultOption = document.createElement('option');
+            defaultOption.value = '';
+            defaultOption.textContent = '-- Choisir un produit --';
+            select.appendChild(defaultOption);
+            
+            if (produitsList && produitsList.length > 0) {
+                produitsList.forEach(p => {
                     const option = document.createElement('option');
                     option.value = p.id;
                     option.setAttribute('data-prix', p.prix_vente);
                     option.setAttribute('data-nom', p.nom.replace(/'/g, "\\'"));
                     option.setAttribute('data-stock', p.quantite_stock);
-                    option.text = `${p.nom} - ${parseInt(p.prix_vente).toLocaleString()} FCFA (Stock: ${p.quantite_stock})`;
+                    option.textContent = `${p.nom} - ${parseInt(p.prix_vente).toLocaleString()} FCFA (Stock: ${p.quantite_stock})`;
                     select.appendChild(option);
                 });
+                console.log('✅ Select mis à jour avec', select.options.length - 1, 'produits');
             }
+            
+            // 🔥 FORCER L'AFFICHAGE DE TOUTES LES OPTIONS
+            for (let i = 0; i < select.options.length; i++) {
+                select.options[i].style.display = '';
+            }
+            
+            const countEl = document.getElementById('produitResultCount');
+            if (countEl) countEl.textContent = produitsList.length;
             
             hideLoader();
             chargerStocks();
             filterProduits();
         })
         .catch(error => {
-            console.error('Erreur:', error);
+            console.error('❌ Erreur chargement produits:', error);
             hideLoader();
             document.getElementById('produitSelect').innerHTML = '<option value="">-- Erreur de chargement --</option>';
         });
@@ -423,15 +572,26 @@ function filterProduits() {
     const options = select.options;
     let visibleCount = 0;
     
+    // 🔥 Si pas de recherche, tout afficher
+    if (searchTerm === '') {
+        for (let i = 0; i < options.length; i++) {
+            options[i].style.display = '';
+        }
+        visibleCount = options.length - 1; // -1 pour l'option par défaut
+        document.getElementById('produitResultCount').innerText = visibleCount;
+        return;
+    }
+    
     for (let i = 1; i < options.length; i++) {
         const text = options[i].text.toLowerCase();
-        if (searchTerm === '' || text.includes(searchTerm)) {
+        if (text.includes(searchTerm)) {
             options[i].style.display = '';
             visibleCount++;
         } else {
             options[i].style.display = 'none';
         }
     }
+    
     document.getElementById('produitResultCount').innerText = visibleCount;
 }
 
@@ -440,59 +600,6 @@ function clearProduitSearch() {
     filterProduits();
 }
 
-// ========== GESTION PATIENT ==========
-// ========== GESTION PATIENT CORRIGÉE ==========
-function checkSelectedPatient() {
-    // Nettoie d'abord les anciennes données
-    patientId = null;
-    patientTaux = 0;
-    patientName = '';
-    patientAssurance = '';
-    
-    patientId = sessionStorage.getItem('selectedPatientId');
-    patientName = sessionStorage.getItem('selectedPatientName');
-    patientAssurance = sessionStorage.getItem('selectedPatientAssurance');
-    let taux = sessionStorage.getItem('selectedPatientTaux');
-    
-    if (!patientId || patientId === 'null' || patientId === 'undefined') {
-        patientId = localStorage.getItem('selectedPatientId');
-        patientName = localStorage.getItem('selectedPatientName');
-        patientAssurance = localStorage.getItem('selectedPatientAssurance');
-        taux = localStorage.getItem('selectedPatientTaux');
-    }
-    
-    if (patientId && patientId !== 'null' && patientId !== 'undefined' && patientId !== '') {
-        patientTaux = parseFloat(taux) || 0;
-        document.getElementById('selectedPatientName').innerText = patientName || 'Patient';
-        
-        let assuranceText = 'Non assuré';
-        if (patientAssurance === 'amu_cnss') assuranceText = 'AMU-CNSS';
-        else if (patientAssurance === 'amu_inam') assuranceText = 'AMU-INAM';
-        else if (patientAssurance && patientAssurance !== 'non_assure') assuranceText = patientAssurance;
-        
-        document.getElementById('selectedAssurance').innerHTML = assuranceText;
-        document.getElementById('selectedTaux').innerHTML = patientTaux;
-        
-        // 🔥 AJOUT : Mettre à jour le champ taux modifiable
-        const tauxVenteInput = document.getElementById('tauxVente');
-        if (tauxVenteInput) {
-            tauxVenteInput.value = patientTaux;
-        }
-        
-        document.getElementById('patientInfo').style.display = 'block';
-        document.getElementById('noPatientAlert').style.display = 'none';
-        
-        console.log('Patient chargé:', { patientId, patientName, patientTaux });
-    } else {
-        document.getElementById('patientInfo').style.display = 'none';
-        document.getElementById('noPatientAlert').style.display = 'block';
-        document.getElementById('finaliserBtn').disabled = true;
-        console.log('Aucun patient sélectionné');
-    }
-}
-function changePatient() {
-    window.location.href = "/patients";
-}
 
 // ========== GESTION PANIER ==========
 function ajouterProduit() {
@@ -519,11 +626,9 @@ function ajouterProduit() {
         return;
     }
     
-    // Vérifier si le produit existe déjà dans le panier
     const indexExistant = panier.findIndex(item => item.id == produitId);
     
     if (indexExistant !== -1) {
-        // Produit existe déjà
         const nouvelleQte = panier[indexExistant].quantite + quantite;
         if (nouvelleQte > panier[indexExistant].stock_max) {
             alert(`Stock maximum disponible pour ${produitNom}: ${panier[indexExistant].stock_max}`);
@@ -532,7 +637,6 @@ function ajouterProduit() {
         panier[indexExistant].quantite = nouvelleQte;
         panier[indexExistant].total = (panier[indexExistant].prix_reel || panier[indexExistant].prix) * nouvelleQte;
     } else {
-        // Nouveau produit
         panier.push({
             id: parseInt(produitId),
             nom: produitNom,
@@ -548,7 +652,6 @@ function ajouterProduit() {
     select.selectedIndex = 0;
     document.getElementById('quantite').value = '1';
     
-    // Feedback visuel
     const btn = document.querySelector('.btn-success');
     const originalText = btn.innerHTML;
     btn.innerHTML = '<i class="fas fa-check"></i> Ajouté !';
@@ -595,7 +698,9 @@ function afficherPanier() {
         document.getElementById('finaliserBtn').disabled = true;
         document.getElementById('sousTotal').innerHTML = '0 FCFA';
         document.getElementById('priseEnCharge').innerHTML = '0 FCFA';
+        document.getElementById('priseEnCharge2').innerHTML = '0 FCFA';
         document.getElementById('netAPayer').innerHTML = '0 FCFA';
+        document.getElementById('priseEnCharge2Row').style.display = 'none';
         updatePanierBadge();
         return;
     }
@@ -609,12 +714,10 @@ function afficherPanier() {
         
         const row = tbody.insertRow();
         
-        // Colonne 1: Produit
         const cellNom = row.insertCell(0);
         cellNom.innerHTML = `<strong>${item.nom}</strong>`;
         cellNom.style.verticalAlign = 'middle';
         
-        // Colonne 2: Prix unitaire
         const cellPrix = row.insertCell(1);
         cellPrix.className = 'text-center';
         cellPrix.style.verticalAlign = 'middle';
@@ -624,7 +727,6 @@ function afficherPanier() {
                    onchange="modifierPrix(${index}, this.value)">
         `;
         
-        // Colonne 3: Quantité
         const cellQte = row.insertCell(2);
         cellQte.className = 'text-center';
         cellQte.style.verticalAlign = 'middle';
@@ -638,13 +740,11 @@ function afficherPanier() {
             </div>
         `;
         
-        // Colonne 4: Total
         const cellTotal = row.insertCell(3);
         cellTotal.className = 'text-end fw-bold';
         cellTotal.style.verticalAlign = 'middle';
         cellTotal.innerHTML = `${total.toLocaleString()} FCFA`;
         
-        // Colonne 5: Action
         const cellAction = row.insertCell(4);
         cellAction.className = 'text-center';
         cellAction.style.verticalAlign = 'middle';
@@ -655,16 +755,11 @@ function afficherPanier() {
         `;
     });
     
-    const priseEnCharge = (sousTotal * patientTaux) / 100;
-    const netAPayer = sousTotal - priseEnCharge;
+    // 🔥 AJOUTER CETTE LIGNE UNIQUEMENT
+    calculerTotal();
     
-    document.getElementById('sousTotal').innerHTML = sousTotal.toLocaleString() + ' FCFA';
-    document.getElementById('priseEnCharge').innerHTML = priseEnCharge.toLocaleString() + ' FCFA';
-    document.getElementById('netAPayer').innerHTML = netAPayer.toLocaleString() + ' FCFA';
-    document.getElementById('finaliserBtn').disabled = false;
     updatePanierBadge();
 }
-
 function supprimerProduit(index) {
     if (index >= 0 && index < panier.length) {
         panier.splice(index, 1);
@@ -692,7 +787,8 @@ function updatePanierBadge() {
     }
 }
 
-// ========== FINALISATION AVEC PROGRESSION ==========
+// ========== FINALISATION VENTE ==========
+// ========== FINALISATION VENTE ==========
 function finaliserVente() {
     console.log('=== DÉBUT FINALISATION VENTE ===');
     console.log('Panier:', JSON.parse(JSON.stringify(panier)));
@@ -702,22 +798,43 @@ function finaliserVente() {
         return;
     }
     
-    // Récupérer le patient directement depuis sessionStorage
     let currentPatientId = sessionStorage.getItem('selectedPatientId');
     let currentPatientName = sessionStorage.getItem('selectedPatientName');
     let patientTauxOriginal = parseFloat(sessionStorage.getItem('selectedPatientTaux') || 0);
+    let patientAssurance2 = sessionStorage.getItem('selectedPatientAssurance2') || '';
+    let patientTaux2 = parseFloat(sessionStorage.getItem('selectedPatientTaux2') || 0);
     
-    // 🔥 Récupérer le taux modifié depuis le champ
-    let tauxUtilise = parseFloat(document.getElementById('tauxVente').value);
-    if (isNaN(tauxUtilise)) {
-        tauxUtilise = patientTauxOriginal;
+    let tauxPrincipal = parseFloat(document.getElementById('tauxVente').value);
+    if (isNaN(tauxPrincipal)) {
+        tauxPrincipal = patientTauxOriginal;
     }
     
-    console.log('Patient depuis sessionStorage:', {
+    // 🔥 Vérifier si l'assurance complémentaire est active
+    let assurance2Active = false;
+    const toggle = document.getElementById('toggleAssurance2');
+    if (toggle) {
+        assurance2Active = toggle.checked;
+    }
+    
+    // 🔥 Récupérer le taux temporaire si modifié
+    const tauxComplementaire = tauxTempModifie ? tauxTempValeur : patientTaux2;
+    
+    // 🔥 IMPORTANT: Sauvegarder le taux temporaire pour le reçu
+    const tauxFinalAssurance2 = tauxComplementaire;
+    const tauxFinalModifie = tauxTempModifie;
+    const tauxOriginal = patientTaux2Original || 0;
+    
+    console.log('Patient:', {
         id: currentPatientId,
         nom: currentPatientName,
-        tauxPatient: patientTauxOriginal,
-        tauxUtilise: tauxUtilise
+        tauxPrincipal: tauxPrincipal,
+        assurance2: patientAssurance2,
+        taux2: patientTaux2,
+        assurance2Active: assurance2Active,
+        tauxTempModifie: tauxTempModifie,
+        tauxTempValeur: tauxTempValeur,
+        tauxFinalAssurance2: tauxFinalAssurance2,
+        tauxOriginal: tauxOriginal
     });
     
     if (!currentPatientId || currentPatientId === 'null' || currentPatientId === 'undefined') {
@@ -726,15 +843,28 @@ function finaliserVente() {
             currentPatientId = localId;
             currentPatientName = localStorage.getItem('selectedPatientName');
             patientTauxOriginal = parseFloat(localStorage.getItem('selectedPatientTaux') || 0);
-            tauxUtilise = patientTauxOriginal;
-            console.log('Patient depuis localStorage:', { id: currentPatientId, nom: currentPatientName });
+            tauxPrincipal = patientTauxOriginal;
+            patientAssurance2 = localStorage.getItem('selectedPatientAssurance2') || '';
+            patientTaux2 = parseFloat(localStorage.getItem('selectedPatientTaux2') || 0);
+            
+            // 🔥 Récupérer aussi le taux temporaire du localStorage
+            const savedTempTaux = localStorage.getItem('tauxTempValeur');
+            const savedTempModifie = localStorage.getItem('tauxTempModifie');
+            if (savedTempModifie === 'true' && savedTempTaux) {
+                tauxFinalAssurance2 = parseFloat(savedTempTaux);
+            }
+            
+            // 🔥 Vérifier aussi le toggle dans localStorage
+            const toggleState = localStorage.getItem('assurance2Active');
+            if (toggleState !== null) {
+                assurance2Active = toggleState === 'true';
+            }
         } else {
             alert('Veuillez sélectionner un patient');
             return;
         }
     }
     
-    // Calcul des totaux avec le taux modifié
     let sousTotal = 0;
     const produitsDetails = [];
     
@@ -752,26 +882,46 @@ function finaliserVente() {
         });
     }
     
-    const priseEnCharge = (sousTotal * tauxUtilise) / 100;
-    const netAPayer = sousTotal - priseEnCharge;
+    let priseEnCharge = (sousTotal * tauxPrincipal) / 100;
+    let resteApresPrincipal = sousTotal - priseEnCharge;
+    let priseEnCharge2 = 0;
+    
+    // 🔥 Utiliser le taux final pour le calcul
+    if (assurance2Active && patientAssurance2 && patientAssurance2 !== '' && patientAssurance2 !== 'Aucune' && tauxFinalAssurance2 > 0 && resteApresPrincipal > 0) {
+        priseEnCharge2 = (resteApresPrincipal * tauxFinalAssurance2) / 100;
+    }
+    
+    let netAPayer = sousTotal - priseEnCharge - priseEnCharge2;
+    if (netAPayer < 0) netAPayer = 0;
+    
     const ordonnance = document.getElementById('avecOrdonnance').checked;
     const typeDocument = document.getElementById('typeDocument').value;
     const modePaiement = document.getElementById('modePaiement').value;
     const formatImpression = document.getElementById('formatImpression').value;
     
-    console.log('Calculs:', {
-        sousTotal,
-        priseEnCharge,
-        netAPayer,
-        taux: tauxUtilise,
-        format: formatImpression
+    console.log('Calculs:', { 
+        sousTotal, 
+        priseEnCharge, 
+        priseEnCharge2, 
+        netAPayer, 
+        tauxPrincipal, 
+        tauxFinalAssurance2, 
+        assurance2Active,
+        tauxFinalModifie
     });
     
-    // Confirmation détaillée
     let confirmationMsg = `📊 RÉCAPITULATIF DE LA VENTE\n\n`;
     confirmationMsg += `👤 Patient: ${currentPatientName}\n`;
     confirmationMsg += `🆔 ID Patient: ${currentPatientId}\n`;
-    confirmationMsg += `🏥 Taux assurance: ${tauxUtilise}%\n`;
+    confirmationMsg += `🏥 Assurance principale: ${tauxPrincipal}%\n`;
+    if (patientAssurance2 && patientAssurance2 !== '' && patientAssurance2 !== 'Aucune') {
+        const tauxAffiche = tauxFinalModifie ? `${tauxFinalAssurance2}% (modifié)` : `${tauxFinalAssurance2}%`;
+        if (assurance2Active) {
+            confirmationMsg += `✅ Assurance complémentaire: ${patientAssurance2} (${tauxAffiche}) - APPLIQUÉE\n`;
+        } else {
+            confirmationMsg += `❌ Assurance complémentaire: ${patientAssurance2} (${tauxAffiche}) - NON APPLIQUÉE\n`;
+        }
+    }
     confirmationMsg += `\n📦 PRODUITS:\n`;
     
     produitsDetails.forEach((item, idx) => {
@@ -780,7 +930,11 @@ function finaliserVente() {
     });
     
     confirmationMsg += `\n💰 Sous-total: ${sousTotal.toLocaleString()} FCFA\n`;
-    confirmationMsg += `🎯 Prise en charge (${tauxUtilise}%): ${priseEnCharge.toLocaleString()} FCFA\n`;
+    confirmationMsg += `🎯 Prise en charge (${tauxPrincipal}%): ${priseEnCharge.toLocaleString()} FCFA\n`;
+    if (assurance2Active && patientAssurance2 && patientAssurance2 !== '' && patientAssurance2 !== 'Aucune' && tauxFinalAssurance2 > 0) {
+        const tauxAffiche = tauxFinalModifie ? `${tauxFinalAssurance2}%` : `${tauxFinalAssurance2}%`;
+        confirmationMsg += `🎯 Prise en charge ${patientAssurance2} (${tauxAffiche}): ${priseEnCharge2.toLocaleString()} FCFA\n`;
+    }
     confirmationMsg += `💵 À payer: ${netAPayer.toLocaleString()} FCFA\n\n`;
     confirmationMsg += `💳 Paiement: ${modePaiement}\n`;
     confirmationMsg += `📄 Document: ${typeDocument}\n`;
@@ -788,24 +942,33 @@ function finaliserVente() {
     confirmationMsg += `✅ Confirmer la vente ?`;
     
     if (!confirm(confirmationMsg)) {
-        console.log('Vente annulée par l\'utilisateur');
+        console.log('Vente annulée');
         return;
     }
     
-    // Construction de l'objet vente
+    // 🔥 CONSTRUCTION DE L'OBJET VENTE AVEC LE TAUX TEMPORAIRE
     const venteData = {
         patient_id: parseInt(currentPatientId),
         patient_nom: currentPatientName,
         produits: produitsDetails,
         sous_total: sousTotal,
         prise_en_charge: priseEnCharge,
+        prise_en_charge2: priseEnCharge2,
         net_a_payer: netAPayer,
         mode_paiement: modePaiement,
         avec_ordonnance: ordonnance,
-        taux_assurance: tauxUtilise  // 🔥 Taux modifié
+        taux_assurance: tauxPrincipal,
+        assurance2_nom: assurance2Active ? (patientAssurance2 || '') : '',
+        taux_assurance2: assurance2Active ? (tauxFinalAssurance2 || 0) : 0,
+        assurance2_active: assurance2Active,
+        // 🔥 AJOUT DES INFOS DE MODIFICATION DE TAUX
+        taux_temp_modifie: tauxFinalModifie,
+        taux_original: tauxOriginal,
+        // Pour compatibilité avec le recu
+        assurance_nom: patientAssurance || 'non_assure'
     };
     
-    console.log('DONNÉES ENVOYÉES AU SERVEUR:', JSON.stringify(venteData, null, 2));
+    console.log('📦 DONNÉES ENVOYÉES AU BACKEND:', JSON.stringify(venteData, null, 2));
     
     showProgress('Finalisation de la vente', 'Préparation de la vente...');
     updateProgress(10, 'Vérification des stocks...');
@@ -826,10 +989,18 @@ function finaliserVente() {
     .then(r => r.json())
     .then(data => {
         clearInterval(progressInterval);
-        console.log('Réponse serveur:', data);
+        console.log('📥 Réponse du serveur:', data);
         
         if (data.success) {
             updateProgress(100, 'Vente enregistrée !');
+            
+            // 🔥 Sauvegarder les infos du taux temporaire pour le reçu
+            if (tauxFinalModifie) {
+                sessionStorage.setItem('lastTauxModifie', 'true');
+                sessionStorage.setItem('lastTauxTemp', tauxFinalAssurance2.toString());
+                sessionStorage.setItem('lastTauxOriginal', tauxOriginal.toString());
+                sessionStorage.setItem('lastAssurance2Nom', patientAssurance2);
+            }
             
             setTimeout(() => {
                 hideProgress();
@@ -840,36 +1011,54 @@ function finaliserVente() {
                 panier = [];
                 afficherPanier();
                 
-                // Redirection AVEC le format
+                // 🔥 CONSTRUIRE L'URL AVEC LES PARAMÈTRES DE TAUX
+                let url = '';
+                let baseUrl = '';
+                
                 if (typeDocument === 'recu_client') {
-                    window.location.href = `/recu/${data.vente_id}/pharma?format=${formatImpression}`;
+                    baseUrl = `/recu/${data.vente_id}/pharma`;
                 } else if (typeDocument === 'recu_structure') {
-                    window.location.href = `/recu_structure/${data.vente_id}/pharma?format=${formatImpression}`;
+                    baseUrl = `/recu_structure/${data.vente_id}/pharma`;
                 } else if (typeDocument === 'facture_client') {
-                    window.location.href = `/facture/${data.vente_id}/pharma?format=${formatImpression}`;
+                    baseUrl = `/facture/${data.vente_id}/pharma`;
                 } else if (typeDocument === 'facture_structure') {
-                    window.location.href = `/facture_structure/${data.vente_id}/pharma?format=${formatImpression}`;
+                    baseUrl = `/facture_structure/${data.vente_id}/pharma`;
                 } else if (typeDocument === 'les_deux') {
-                    window.open(`/recu/${data.vente_id}/pharma?format=${formatImpression}`, '_blank');
-                    window.open(`/recu_structure/${data.vente_id}/pharma?format=${formatImpression}`, '_blank');
+                    // Ouvrir les deux en même temps
+                    const url1 = `/recu/${data.vente_id}/pharma?format=${formatImpression}`;
+                    const url2 = `/recu_structure/${data.vente_id}/pharma?format=${formatImpression}`;
+                    window.open(url1, '_blank');
+                    window.open(url2, '_blank');
                     window.location.href = "/dashboard";
+                    return;
                 } else {
                     window.location.href = "/dashboard";
+                    return;
                 }
+                
+                // 🔥 AJOUTER LES PARAMÈTRES DE TAUX À L'URL
+                url = baseUrl + `?format=${formatImpression}`;
+                if (tauxFinalModifie) {
+                    url += `&taux_modifie=true&taux_temp=${tauxFinalAssurance2}&taux_original=${tauxOriginal}`;
+                    url += `&assurance2_nom=${encodeURIComponent(patientAssurance2)}`;
+                }
+                
+                console.log('🔗 Redirection vers:', url);
+                window.location.href = url;
+                
             }, 500);
         } else {
             hideProgress();
-            alert('Erreur: ' + (data.error || 'Erreur inconnue'));
+            alert('❌ Erreur: ' + (data.error || 'Erreur inconnue'));
         }
     })
     .catch(error => {
         clearInterval(progressInterval);
         hideProgress();
-        console.error('Erreur fetch:', error);
-        alert('Erreur: ' + error);
+        console.error('❌ Erreur fetch:', error);
+        alert('❌ Erreur: ' + error);
     });
 }
-
 // ========== CRÉER PROFORMA ==========
 function creerProforma() {
     if (panier.length === 0) {
@@ -881,42 +1070,40 @@ function creerProforma() {
     let patientNom = sessionStorage.getItem('selectedPatientName') || localStorage.getItem('selectedPatientName');
     let patientAssurance = sessionStorage.getItem('selectedPatientAssurance') || localStorage.getItem('selectedPatientAssurance');
     let patientTaux = parseFloat(sessionStorage.getItem('selectedPatientTaux') || localStorage.getItem('selectedPatientTaux') || 0);
+    let patientAssurance2 = sessionStorage.getItem('selectedPatientAssurance2') || localStorage.getItem('selectedPatientAssurance2') || '';
+    let patientTaux2 = parseFloat(sessionStorage.getItem('selectedPatientTaux2') || localStorage.getItem('selectedPatientTaux2') || 0);
+    
+    // 🔥 Utiliser le taux temporaire si modifié
+    if (tauxTempModifie) {
+        patientTaux2 = tauxTempValeur;
+    }
     
     if (!patientId || patientId === 'null') {
         alert('Veuillez sélectionner un patient');
         return;
     }
     
-    // 🔥 RÉCUPÉRER LE TÉLÉPHONE DEPUIS L'API
     showLoader('Récupération des infos patient...');
     
     fetch(`/api/patients/${patientId}`)
         .then(response => response.json())
         .then(patient => {
             hideLoader();
-            
             let patientTelephone = patient.telephone || '';
-            console.log('Téléphone récupéré:', patientTelephone);
-            
-            // Continuer avec la création de la proforma
-            creerProformaSuite(patientId, patientNom, patientAssurance, patientTaux, patientTelephone);
+            creerProformaSuite(patientId, patientNom, patientAssurance, patientTaux, patientAssurance2, patientTaux2, patientTelephone);
         })
         .catch(error => {
             hideLoader();
-            console.error('Erreur récupération patient:', error);
-            // Continuer sans téléphone
-            creerProformaSuite(patientId, patientNom, patientAssurance, patientTaux, '');
+            creerProformaSuite(patientId, patientNom, patientAssurance, patientTaux, patientAssurance2, patientTaux2, '');
         });
 }
 
-// 🔥 NOUVELLE FONCTION : SUITE DE LA CRÉATION
-function creerProformaSuite(patientId, patientNom, patientAssurance, patientTaux, patientTelephone) {
-    let tauxUtilise = parseFloat(document.getElementById('tauxVente').value);
-    if (isNaN(tauxUtilise)) {
-        tauxUtilise = patientTaux;
+function creerProformaSuite(patientId, patientNom, patientAssurance, patientTaux, patientAssurance2, patientTaux2, patientTelephone) {
+    let tauxPrincipal = parseFloat(document.getElementById('tauxVente').value);
+    if (isNaN(tauxPrincipal)) {
+        tauxPrincipal = patientTaux;
     }
     
-    // Calcul des totaux
     let sousTotal = 0;
     const articles = [];
     
@@ -924,7 +1111,6 @@ function creerProformaSuite(patientId, patientNom, patientAssurance, patientTaux
         const prix = item.prix_reel || item.prix || 0;
         const total = prix * item.quantite;
         sousTotal += total;
-        
         const type = item.prix_reel !== undefined ? 'produit' : 'acte';
         
         articles.push({
@@ -941,8 +1127,11 @@ function creerProformaSuite(patientId, patientNom, patientAssurance, patientTaux
         patient_nom: patientNom,
         patient_telephone: patientTelephone || '',
         assurance_nom: patientAssurance && patientAssurance !== 'non_assure' ? patientAssurance : 'Non assuré',
-        taux_assurance: tauxUtilise,
+        taux_assurance: tauxPrincipal,
         numero_assure: localStorage.getItem('selectedPatientNumero') || '',
+        assurance2_nom: patientAssurance2 || '',
+        taux_assurance2: patientTaux2 || 0,
+        numero_assure2: localStorage.getItem('selectedPatientNumero2') || '',
         articles: articles,
         type: 'mixte',
         notes: document.getElementById('avecOrdonnance')?.checked ? 'Avec ordonnance' : ''
@@ -950,13 +1139,15 @@ function creerProformaSuite(patientId, patientNom, patientAssurance, patientTaux
     
     console.log('Données proforma:', proformaData);
     
-    // Confirmation
     let msg = '📋 NOUVELLE PROFORMA\n\n';
     msg += `👤 Patient: ${patientNom}\n`;
     msg += `📱 Téléphone: ${patientTelephone || 'Non renseigné'}\n`;
-    msg += `🏥 Assurance: ${proformaData.assurance_nom}\n`;
-    msg += `📊 Taux: ${tauxUtilise}%\n\n`;
-    msg += `📦 ${articles.length} article(s)\n`;
+    msg += `🏥 Assurance principale: ${proformaData.assurance_nom} (${tauxPrincipal}%)\n`;
+    if (patientAssurance2 && patientTaux2 > 0) {
+        const tauxAffiche = tauxTempModifie ? `${patientTaux2}% (modifié)` : `${patientTaux2}%`;
+        msg += `🏥 Assurance complémentaire: ${patientAssurance2} (${tauxAffiche})\n`;
+    }
+    msg += `\n📦 ${articles.length} article(s)\n`;
     msg += `💰 Total: ${sousTotal.toLocaleString()} FCFA\n\n`;
     msg += `Confirmer ?`;
     
@@ -974,11 +1165,9 @@ function creerProformaSuite(patientId, patientNom, patientAssurance, patientTaux
         hideLoader();
         if (data.success) {
             alert(`✅ Proforma #${data.numero} créée !\nNet à payer: ${data.net_a_payer.toLocaleString()} FCFA`);
-            
             if (confirm('Imprimer la proforma ?')) {
                 window.open(`/proforma/${data.id}/print`, '_blank');
             }
-            
             panier = [];
             afficherPanier();
             if (typeof updatePanierBadge === 'function') {
@@ -994,7 +1183,7 @@ function creerProformaSuite(patientId, patientNom, patientAssurance, patientTaux
         alert('Erreur: ' + error);
     });
 }
-// ========== CHARGER LE BADGE PROFORMA ==========
+
 function chargerProformaBadge() {
     fetch('/api/proformas/count')
         .then(response => response.json())
@@ -1012,7 +1201,6 @@ function chargerProformaBadge() {
         .catch(() => {});
 }
 
-// Activer/désactiver le bouton Proforma en fonction du panier
 function updateProformaButton() {
     const btn = document.getElementById('proformaBtn');
     if (btn) {
@@ -1020,8 +1208,6 @@ function updateProformaButton() {
     }
 }
 
-// Surcharger la fonction afficherPanier pour inclure le bouton Proforma
-// (à ajouter dans le script existant)
 const originalAfficherPanier = window.afficherPanier;
 window.afficherPanier = function() {
     if (originalAfficherPanier) {
@@ -1029,13 +1215,239 @@ window.afficherPanier = function() {
     }
     updateProformaButton();
 };
+
+// ============================================
+// GESTION ASSURANCE COMPLÉMENTAIRE AMÉLIORÉE
+// ============================================
+let assurance2Active = false;
+let assurance2Nom = '';
+let assurance2Taux = 0;
+
+function checkAssuranceComplementaire() {
+    // Récupérer les données de l'assurance complémentaire depuis la session
+    assurance2Nom = sessionStorage.getItem('selectedPatientAssurance2') || '';
+    assurance2Taux = parseFloat(sessionStorage.getItem('selectedPatientTaux2')) || 0;
+    patientTaux2Original = assurance2Taux;
+    patientTaux2 = assurance2Taux;
+    
+    const toggle = document.getElementById('toggleAssurance2');
+    const label = document.getElementById('assurance2NomDisplay');
+    const tauxDisplay = document.getElementById('assurance2TauxDisplay');
+    const tauxEdit = document.getElementById('assurance2TauxEdit');
+    const tauxDefaut = document.getElementById('assurance2TauxDefaut');
+    const tauxTempInput = document.getElementById('assurance2TauxTemp');
+    const badgeTemp = document.getElementById('tauxTempBadge');
+    
+    if (assurance2Nom && assurance2Nom !== '' && assurance2Nom !== 'Aucune' && assurance2Taux > 0) {
+        toggle.disabled = false;
+        label.textContent = assurance2Nom;
+        tauxDisplay.textContent = assurance2Taux + '%';
+        document.getElementById('assurance2Info').style.display = 'block';
+        
+        tauxEdit.style.display = 'block';
+        tauxDefaut.textContent = assurance2Taux;
+        tauxTempInput.value = assurance2Taux;
+        
+        // 🔥 RESTAURER LE TAUX TEMPORAIRE SI EXISTANT
+        restaurerTauxTemp();
+        
+        // Si le taux a été restauré, le badge est déjà géré par restaurerTauxTemp
+        if (!tauxTempModifie) {
+            badgeTemp.style.display = 'none';
+            tauxDisplay.className = 'badge bg-info';
+        }
+        
+        toggle.checked = true;
+        assurance2Active = true;
+    } else {
+        toggle.disabled = true;
+        toggle.checked = false;
+        label.textContent = 'Aucune';
+        tauxDisplay.textContent = '0%';
+        document.getElementById('assurance2Info').style.display = 'none';
+        tauxEdit.style.display = 'none';
+        assurance2Active = false;
+        tauxTempModifie = false;
+        localStorage.removeItem('tauxTempValeur');
+        localStorage.removeItem('tauxTempModifie');
+    }
+    
+    calculerTotal();
+}
+function toggleAssuranceComplementaire() {
+    const toggle = document.getElementById('toggleAssurance2');
+    assurance2Active = toggle.checked;
+    calculerTotal();
+}
+
+// 🔥 NOUVELLE FONCTION : Appliquer un taux temporaire
+// Sauvegarder le taux temporaire dans le localStorage
+function sauvegarderTauxTemp() {
+    if (tauxTempModifie) {
+        localStorage.setItem('tauxTempValeur', tauxTempValeur.toString());
+        localStorage.setItem('tauxTempModifie', 'true');
+    } else {
+        localStorage.removeItem('tauxTempValeur');
+        localStorage.removeItem('tauxTempModifie');
+    }
+}
+
+// Restaurer le taux temporaire depuis le localStorage
+function restaurerTauxTemp() {
+    const savedTemp = localStorage.getItem('tauxTempValeur');
+    const savedModifie = localStorage.getItem('tauxTempModifie');
+    if (savedModifie === 'true' && savedTemp) {
+        tauxTempModifie = true;
+        tauxTempValeur = parseFloat(savedTemp);
+        patientTaux2 = tauxTempValeur;
+        
+        // Mettre à jour l'affichage
+        const badge = document.getElementById('tauxTempBadge');
+        if (badge) {
+            badge.style.display = 'inline-block';
+            badge.textContent = `Modifié (${tauxTempValeur}%)`;
+        }
+        const tauxDisplay = document.getElementById('assurance2TauxDisplay');
+        if (tauxDisplay) {
+            tauxDisplay.textContent = tauxTempValeur + '%';
+            tauxDisplay.className = 'badge bg-warning text-dark';
+        }
+        document.getElementById('assurance2TauxTemp').value = tauxTempValeur;
+    }
+}
+
+// Modifier appliquerTauxTemp pour sauvegarder
+function appliquerTauxTemp() {
+    const input = document.getElementById('assurance2TauxTemp');
+    const valeur = parseFloat(input.value);
+    const tauxOriginal = patientTaux2Original || 0;
+    
+    if (isNaN(valeur) || valeur < 0) {
+        alert('Veuillez entrer un taux valide (0-100)');
+        input.value = tauxOriginal;
+        return;
+    }
+    
+    if (valeur > 100) {
+        alert('Le taux ne peut pas dépasser 100%');
+        input.value = tauxOriginal;
+        return;
+    }
+    
+    if (valeur === tauxOriginal) {
+        resetTauxTemp();
+        return;
+    }
+    
+    tauxTempModifie = true;
+    tauxTempValeur = valeur;
+    patientTaux2 = valeur;
+    
+    // Sauvegarder
+    sauvegarderTauxTemp();
+    
+    const badge = document.getElementById('tauxTempBadge');
+    badge.style.display = 'inline-block';
+    badge.textContent = `Modifié (${valeur}%)`;
+    
+    const tauxDisplay = document.getElementById('assurance2TauxDisplay');
+    tauxDisplay.textContent = valeur + '%';
+    tauxDisplay.className = 'badge bg-warning text-dark';
+    
+    document.getElementById('assurance2TauxDefaut').textContent = tauxOriginal;
+    
+    console.log(`Taux temporaire appliqué: ${valeur}% (original: ${tauxOriginal}%)`);
+    calculerTotal();
+}
+
+// Modifier resetTauxTemp pour supprimer la sauvegarde
+function resetTauxTemp() {
+    const tauxOriginal = patientTaux2Original || 0;
+    
+    tauxTempModifie = false;
+    tauxTempValeur = tauxOriginal;
+    patientTaux2 = tauxOriginal;
+    
+    // Supprimer la sauvegarde
+    localStorage.removeItem('tauxTempValeur');
+    localStorage.removeItem('tauxTempModifie');
+    
+    const badge = document.getElementById('tauxTempBadge');
+    badge.style.display = 'none';
+    
+    const tauxDisplay = document.getElementById('assurance2TauxDisplay');
+    tauxDisplay.textContent = tauxOriginal + '%';
+    tauxDisplay.className = 'badge bg-info';
+    
+    document.getElementById('assurance2TauxDefaut').textContent = tauxOriginal;
+    document.getElementById('assurance2TauxTemp').value = tauxOriginal;
+    
+    console.log(`Taux réinitialisé à: ${tauxOriginal}%`);
+    calculerTotal();
+}
+// Modifier la fonction calculerTotal pour prendre en compte le taux temporaire
+function calculerTotal() {
+    // 🔥 RECALCULER LE SOUS-TOTAL À PARTIR DU PANIER
+    let sousTotal = 0;
+    for (const item of panier) {
+        const prixReel = item.prix_reel || item.prix;
+        sousTotal += prixReel * item.quantite;
+    }
+    
+    // 🔥 Récupérer les taux
+    let tauxPrincipal = parseFloat(document.getElementById('tauxVente').value);
+    if (isNaN(tauxPrincipal)) {
+        tauxPrincipal = patientTaux || 0;
+    }
+    
+    // 🔥 Vérifier si l'assurance complémentaire est active
+    let tauxComplementaire = 0;
+    let assurance2Nom = '';
+    
+    if (assurance2Active && patientAssurance2 && patientAssurance2 !== 'Aucune') {
+        tauxComplementaire = tauxTempModifie ? tauxTempValeur : (patientTaux2Original || 0);
+        assurance2Nom = patientAssurance2 || '';
+    }
+    
+    // 🔥 Calculs
+    let priseEnCharge = (sousTotal * tauxPrincipal) / 100;
+    let resteApresPrincipal = sousTotal - priseEnCharge;
+    let priseEnCharge2 = 0;
+    
+    if (tauxComplementaire > 0 && resteApresPrincipal > 0) {
+        priseEnCharge2 = (resteApresPrincipal * tauxComplementaire) / 100;
+    }
+    
+    let netAPayer = sousTotal - priseEnCharge - priseEnCharge2;
+    if (netAPayer < 0) netAPayer = 0;
+    
+    // 🔥 Mettre à jour l'affichage
+    document.getElementById('sousTotal').innerHTML = sousTotal.toLocaleString() + ' FCFA';
+    document.getElementById('priseEnCharge').innerHTML = priseEnCharge.toLocaleString() + ' FCFA';
+    document.getElementById('netAPayer').innerHTML = netAPayer.toLocaleString() + ' FCFA';
+    
+    // 🔥 Afficher la prise en charge complémentaire
+    const priseEnCharge2El = document.getElementById('priseEnCharge2');
+    const priseEnCharge2Row = document.getElementById('priseEnCharge2Row');
+    if (priseEnCharge2El && assurance2Nom && tauxComplementaire > 0 && assurance2Active) {
+        const tauxAffiche = tauxTempModifie ? `${tauxComplementaire}%` : `${tauxComplementaire}%`;
+        const modifText = tauxTempModifie ? ' 🔄' : '';
+        priseEnCharge2El.innerHTML = `${assurance2Nom} (${tauxAffiche}) : - ${priseEnCharge2.toLocaleString()} FCFA${modifText}`;
+        if (priseEnCharge2Row) priseEnCharge2Row.style.display = 'table-row';
+    } else if (priseEnCharge2Row) {
+        priseEnCharge2Row.style.display = 'none';
+    }
+    
+    // 🔥 Activer/désactiver les boutons
+    document.getElementById('finaliserBtn').disabled = (panier.length === 0);
+    document.getElementById('proformaBtn').disabled = (panier.length === 0);
+}
+
 // ========== INITIALISATION ==========
 document.addEventListener('DOMContentLoaded', function() {
-    checkSelectedPatient();
     chargerProduits();
+    checkSelectedPatient();
     chargerProformaBadge();
-    
-    // Mettre à jour les boutons
     updateProformaButton();
 });
 </script>

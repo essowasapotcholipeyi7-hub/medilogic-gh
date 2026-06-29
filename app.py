@@ -514,9 +514,11 @@ def patients():
         return redirect(url_for('dashboard'))
     
     try:
+        # 🔥 AJOUTER les colonnes de l'assurance complémentaire
         patients = db.execute_query("""
             SELECT id, nom, prenom, telephone, adresse, date_naissance,
-                   type_assurance, taux_prise_charge, numero_assure
+                   type_assurance, taux_prise_charge, numero_assure,
+                   assurance2_nom, taux_assurance2, numero_assure2
             FROM patients 
             WHERE structure_id = %s 
             ORDER BY id DESC
@@ -537,7 +539,10 @@ def patients():
                         'age': calculer_age(date_naissance) if date_naissance else None,
                         'type_assurance': p.get('type_assurance', 'non_assure'),
                         'taux_prise_charge': p.get('taux_prise_charge', 0),
-                        'numero_assure': p.get('numero_assure', '')
+                        'numero_assure': p.get('numero_assure', ''),
+                        'assurance2_nom': p.get('assurance2_nom', ''),      # 🔥 NOUVEAU
+                        'taux_assurance2': p.get('taux_assurance2', 0),      # 🔥 NOUVEAU
+                        'numero_assure2': p.get('numero_assure2', '')        # 🔥 NOUVEAU
                     })
                 else:
                     date_naissance = p[5] if len(p) > 5 else None
@@ -551,7 +556,10 @@ def patients():
                         'age': calculer_age(date_naissance) if date_naissance else None,
                         'type_assurance': p[6] or 'non_assure',
                         'taux_prise_charge': p[7] or 0,
-                        'numero_assure': p[8] or ''
+                        'numero_assure': p[8] or '',
+                        'assurance2_nom': p[9] if len(p) > 9 else '',        # 🔥 NOUVEAU
+                        'taux_assurance2': p[10] if len(p) > 10 else 0,       # 🔥 NOUVEAU
+                        'numero_assure2': p[11] if len(p) > 11 else ''        # 🔥 NOUVEAU
                     })
         
         return render_template('patients.html', patients=patients_list)
@@ -566,12 +574,16 @@ def patients():
 def api_add_patient():
     try:
         data = request.json
-        structure_id = session.get('structure_id') or 1
+        structure_id = session.get('structure_id')
         
+        # 🔥 Ajouter les colonnes de l'assurance complémentaire
         result = db.execute_query("""
-            INSERT INTO patients (structure_id, nom, prenom, telephone, adresse, 
-                                  date_naissance, type_assurance, taux_prise_charge, numero_assure)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO patients (
+                structure_id, nom, prenom, telephone, adresse, 
+                date_naissance, type_assurance, taux_prise_charge, numero_assure,
+                assurance2_nom, taux_assurance2, numero_assure2
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
             structure_id,
@@ -582,73 +594,19 @@ def api_add_patient():
             data.get('date_naissance', ''),
             data.get('type_assurance', 'non_assure'),
             data.get('taux_prise_charge', 0),
-            data.get('numero_assure', '')
+            data.get('numero_assure', ''),
+            data.get('assurance2_nom'),
+            data.get('taux_assurance2', 0),
+            data.get('numero_assure2')
         ))
-        
-        # Commit explicite
-        if db.conn:
-            db.conn.commit()
         
         if result and len(result) > 0:
             return jsonify({'success': True, 'id': result[0]['id']})
-        else:
-            return jsonify({'success': False, 'error': 'Erreur insertion'}), 500
+        return jsonify({'success': False, 'error': 'Erreur insertion'}), 500
         
     except Exception as e:
-        if db.conn:
-            db.conn.rollback()
+        print(f"❌ Erreur: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
-@app.route('/api/patients', methods=['GET'])
-@login_required
-def api_get_patients():
-    """Récupérer tous les patients de la structure"""
-    try:
-        structure_id = session.get('structure_id')
-        
-        patients = db.execute_query("""
-            SELECT id, nom, prenom, telephone, adresse, date_naissance,
-                   type_assurance, taux_prise_charge, numero_assure
-            FROM patients 
-            WHERE structure_id = %s 
-            ORDER BY nom, prenom
-        """, (structure_id,))
-        
-        result = []
-        for p in patients:
-            if isinstance(p, dict):
-                date_naissance = p.get('date_naissance')
-                result.append({
-                    'id': p.get('id'),
-                    'nom': p.get('nom', ''),
-                    'prenom': p.get('prenom', ''),
-                    'telephone': p.get('telephone', ''),
-                    'adresse': p.get('adresse', ''),
-                    'date_naissance': date_naissance.strftime('%Y-%m-%d') if date_naissance else '',
-                    'type_assurance': p.get('type_assurance', 'non_assure'),
-                    'taux_prise_charge': p.get('taux_prise_charge', 0),
-                    'numero_assure': p.get('numero_assure', '')
-                })
-            else:
-                date_naissance = p[5] if len(p) > 5 else None
-                result.append({
-                    'id': p[0],
-                    'nom': p[1] if len(p) > 1 else '',
-                    'prenom': p[2] if len(p) > 2 else '',
-                    'telephone': p[3] if len(p) > 3 else '',
-                    'adresse': p[4] if len(p) > 4 else '',
-                    'date_naissance': date_naissance.strftime('%Y-%m-%d') if date_naissance else '',
-                    'type_assurance': p[6] if len(p) > 6 else 'non_assure',
-                    'taux_prise_charge': p[7] if len(p) > 7 else 0,
-                    'numero_assure': p[8] if len(p) > 8 else ''
-                })
-        
-        return jsonify(result)
-        
-    except Exception as e:
-        print(f"❌ Erreur GET patients: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify([]), 500
 
 @app.route('/api/patients/<int:id>', methods=['GET'])
 @login_required
@@ -656,9 +614,11 @@ def api_get_patient(id):
     try:
         structure_id = session.get('structure_id')
         
+        # 🔥 Ajouter les colonnes de l'assurance complémentaire
         patient = db.execute_query("""
             SELECT id, nom, prenom, telephone, adresse, date_naissance,
-                   type_assurance, taux_prise_charge, numero_assure
+                   type_assurance, taux_prise_charge, numero_assure,
+                   assurance2_nom, taux_assurance2, numero_assure2
             FROM patients 
             WHERE id = %s AND structure_id = %s
         """, (id, structure_id))
@@ -679,7 +639,10 @@ def api_get_patient(id):
                 'age': calculer_age(date_naissance) if date_naissance else None,
                 'type_assurance': p.get('type_assurance', 'non_assure'),
                 'taux_prise_charge': p.get('taux_prise_charge', 0),
-                'numero_assure': p.get('numero_assure', '')
+                'numero_assure': p.get('numero_assure', ''),
+                'assurance2_nom': p.get('assurance2_nom', ''),
+                'taux_assurance2': p.get('taux_assurance2', 0),
+                'numero_assure2': p.get('numero_assure2', '')
             }
         else:
             p = patient[0]
@@ -694,7 +657,10 @@ def api_get_patient(id):
                 'age': calculer_age(date_naissance) if date_naissance else None,
                 'type_assurance': p[6] if len(p) > 6 else 'non_assure',
                 'taux_prise_charge': p[7] if len(p) > 7 else 0,
-                'numero_assure': p[8] if len(p) > 8 else ''
+                'numero_assure': p[8] if len(p) > 8 else '',
+                'assurance2_nom': p[9] if len(p) > 9 else '',
+                'taux_assurance2': p[10] if len(p) > 10 else 0,
+                'numero_assure2': p[11] if len(p) > 11 else ''
             }
         
         return jsonify(result)
@@ -702,6 +668,67 @@ def api_get_patient(id):
     except Exception as e:
         print(f"❌ Erreur GET patient: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/patients', methods=['GET'])
+@login_required
+def api_get_patients():
+    """Récupérer tous les patients de la structure"""
+    try:
+        structure_id = session.get('structure_id')
+        
+        # 🔥 Ajouter les colonnes de l'assurance complémentaire
+        patients = db.execute_query("""
+            SELECT id, nom, prenom, telephone, adresse, date_naissance,
+                   type_assurance, taux_prise_charge, numero_assure,
+                   assurance2_nom, taux_assurance2, numero_assure2
+            FROM patients 
+            WHERE structure_id = %s 
+            ORDER BY nom, prenom
+        """, (structure_id,))
+        
+        result = []
+        for p in patients:
+            if isinstance(p, dict):
+                date_naissance = p.get('date_naissance')
+                result.append({
+                    'id': p.get('id'),
+                    'nom': p.get('nom', ''),
+                    'prenom': p.get('prenom', ''),
+                    'telephone': p.get('telephone', ''),
+                    'adresse': p.get('adresse', ''),
+                    'date_naissance': date_naissance.strftime('%Y-%m-%d') if date_naissance else '',
+                    'type_assurance': p.get('type_assurance', 'non_assure'),
+                    'taux_prise_charge': p.get('taux_prise_charge', 0),
+                    'numero_assure': p.get('numero_assure', ''),
+                    'assurance2_nom': p.get('assurance2_nom', ''),
+                    'taux_assurance2': p.get('taux_assurance2', 0),
+                    'numero_assure2': p.get('numero_assure2', '')
+                })
+            else:
+                date_naissance = p[5] if len(p) > 5 else None
+                result.append({
+                    'id': p[0],
+                    'nom': p[1] if len(p) > 1 else '',
+                    'prenom': p[2] if len(p) > 2 else '',
+                    'telephone': p[3] if len(p) > 3 else '',
+                    'adresse': p[4] if len(p) > 4 else '',
+                    'date_naissance': date_naissance.strftime('%Y-%m-%d') if date_naissance else '',
+                    'type_assurance': p[6] if len(p) > 6 else 'non_assure',
+                    'taux_prise_charge': p[7] if len(p) > 7 else 0,
+                    'numero_assure': p[8] if len(p) > 8 else '',
+                    'assurance2_nom': p[9] if len(p) > 9 else '',
+                    'taux_assurance2': p[10] if len(p) > 10 else 0,
+                    'numero_assure2': p[11] if len(p) > 11 else ''
+                })
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        print(f"❌ Erreur GET patients: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify([]), 500
+
 
 # ROUTE de vérification (pour debug)
 @app.route('/check_sheets')
@@ -758,9 +785,18 @@ def facture(vente_id, type):
     
     structure_id = session.get('structure_id')
     
-    # Récupérer les infos de la structure depuis Google Sheets
+    if not structure_id:
+        return "Structure non trouvée", 404
+    
+    # Récupérer les infos de la structure
     structures = sheets_helper.get_all_records('structures', use_prefix=False)
     structure_info = next((s for s in structures if str(s.get('ID')) == str(structure_id)), {})
+    
+    structure_nom = structure_info.get('nom', 'Medilogic-GHP')
+    structure_adresse = structure_info.get('adresse', '')
+    structure_telephone = structure_info.get('telephone', '')
+    structure_email = structure_info.get('email', '')
+    structure_logo = structure_info.get('logo_url', '')
     
     articles = []
     sous_total = 0
@@ -773,13 +809,25 @@ def facture(vente_id, type):
     numero_assure = ''
     patient_id = None
     
-    # 🔥 Lire depuis NEON
+    # CHAMPS POUR L'ASSURANCE COMPLÉMENTAIRE
+    assurance2_nom = ''
+    taux_assurance2 = 0
+    prise_en_charge2 = 0
+    numero_assure2 = ''
+    
+    # CORRECTION : Accepter 'pharma' et 'pharmacie'
+    type_bd = 'pharmacie' if type == 'pharma' else type
+    
+    # Lire depuis NEON
     vente = db.execute_query("""
-        SELECT v.*, p.nom, p.prenom, p.type_assurance, p.numero_assure
+        SELECT v.*, p.nom, p.prenom, p.type_assurance, p.numero_assure,
+               p.assurance2_nom as patient_assurance2_nom, 
+               p.taux_assurance2 as patient_taux_assurance2, 
+               p.numero_assure2
         FROM ventes v
         LEFT JOIN patients p ON v.patient_id = p.id
         WHERE v.id = %s AND v.structure_id = %s AND v.type = %s
-    """, (vente_id, structure_id, type))
+    """, (vente_id, structure_id, type_bd))
     
     if not vente or len(vente) == 0:
         return f"Vente {vente_id} non trouvée", 404
@@ -801,19 +849,25 @@ def facture(vente_id, type):
         type_assurance = v.get('type_assurance', 'non_assure')
         numero_assure = v.get('numero_assure', '')
         
-        # Récupérer les articles avec prix unitaire
-        if type == 'actes':
-            actes_data = v.get('actes', [])
-            if isinstance(actes_data, str):
-                actes_data = json.loads(actes_data)
-            for a in actes_data:
-                articles.append({
-                    'nom': a.get('nom', 'Acte'),
-                    'quantite': int(a.get('quantite', 1)),
-                    'prix_unitaire': float(a.get('prix', 0)),
-                    'total': float(a.get('total', 0))
-                })
-        else:  # pharmacie
+        # Récupérer les données de l'assurance complémentaire
+        assurance2_nom = v.get('assurance2_nom', '')
+        taux_assurance2 = float(v.get('taux_assurance2', 0))
+        prise_en_charge2 = float(v.get('prise_en_charge2', 0))
+        numero_assure2 = v.get('numero_assure2', '')
+        
+        # Récupérer le taux original du patient
+        patient_taux_original = float(v.get('patient_taux_assurance2', 0))
+        
+        # Déterminer si le taux a été modifié
+        taux_modifie = False
+        taux_original = patient_taux_original
+        
+        if taux_assurance2 > 0 and patient_taux_original > 0:
+            if abs(taux_assurance2 - patient_taux_original) > 0.01:
+                taux_modifie = True
+        
+        # Récupérer les articles
+        if type_bd == 'pharmacie' or type_bd == 'pharma':
             produits_data = v.get('produits', [])
             if isinstance(produits_data, str):
                 produits_data = json.loads(produits_data)
@@ -824,27 +878,8 @@ def facture(vente_id, type):
                     'prix_unitaire': float(p.get('prix_reel', p.get('prix', 0))),
                     'total': float(p.get('total', 0))
                 })
-    else:
-        # Format tuple
-        v = vente[0]
-        patient_nom = v[2] if len(v) > 2 and v[2] else ''
-        if not patient_nom and len(v) > 12:
-            patient_nom = f"{v[12] or ''} {v[13] or ''}".strip()
-        if not patient_nom:
-            patient_nom = 'Patient'
-        
-        patient_id = v[1] if len(v) > 1 else None
-        mode_paiement = v[7] if len(v) > 7 else 'Espèces'
-        taux_assurance = float(v[10]) if len(v) > 10 else 0
-        prise_en_charge = float(v[5]) if len(v) > 5 else 0
-        net_a_payer = float(v[6]) if len(v) > 6 else 0
-        sous_total = float(v[4]) if len(v) > 4 else 0
-        type_assurance = v[14] if len(v) > 14 else 'non_assure'
-        numero_assure = v[15] if len(v) > 15 else ''
-        
-        # Récupérer les articles
-        if type == 'actes' and len(v) > 10:
-            actes_data = v[10]
+        else:
+            actes_data = v.get('actes', [])
             if isinstance(actes_data, str):
                 actes_data = json.loads(actes_data)
             for a in actes_data:
@@ -854,37 +889,23 @@ def facture(vente_id, type):
                     'prix_unitaire': float(a.get('prix', 0)),
                     'total': float(a.get('total', 0))
                 })
-        elif type == 'pharmacie' and len(v) > 11:
-            produits_data = v[11]
-            if isinstance(produits_data, str):
-                produits_data = json.loads(produits_data)
-            for p in produits_data:
-                articles.append({
-                    'nom': p.get('nom', 'Produit'),
-                    'quantite': int(p.get('quantite', 1)),
-                    'prix_unitaire': float(p.get('prix_reel', p.get('prix', 0))),
-                    'total': float(p.get('total', 0))
-                })
     
-    # Gestion des assurances personnalisées
-    assurance_text = 'Non assuré'
+    # Gestion des assurances
+    assurance_text = type_assurance
     if type_assurance == 'amu_cnss':
         assurance_text = 'AMU-CNSS'
     elif type_assurance == 'amu_inam':
         assurance_text = 'AMU-INAM'
-    elif type_assurance == 'autre':
-        assurance_text = 'Autre assurance'
-    elif type_assurance and type_assurance not in ['non_assure', 'amu_cnss', 'amu_inam', 'autre']:
-        assurance_text = type_assurance
+    elif type_assurance == 'non_assure':
+        assurance_text = 'Non assuré'
     
-    # Générer un nom de fichier
+    # Déterminer si l'assurance complémentaire a été appliquée
+    assurance2_appliquee = False
+    if assurance2_nom and assurance2_nom != '' and assurance2_nom != 'Aucune' and prise_en_charge2 > 0:
+        assurance2_appliquee = True
+    
     patient_nom_clean = patient_nom.replace(' ', '_').replace("'", "").replace('é', 'e').replace('è', 'e').replace('ê', 'e').replace('à', 'a').replace('ç', 'c')
     nom_fichier = f"facture_client_{patient_nom_clean}_{vente_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    structure_logo = structure_info.get('logo_url', '')
-    nom_caissier = session.get('user_name', '')
-    
-    # 🔥 Récupérer l'email de la structure pour la facture
-    structure_email = structure_info.get('email', 'contact@medilogic.com')
     
     return render_template('facture_client.html',
                          vente_id=vente_id,
@@ -894,17 +915,183 @@ def facture(vente_id, type):
                          prise_en_charge=prise_en_charge,
                          net_a_payer=net_a_payer,
                          patient_nom=patient_nom,
+                         patient_id=patient_id,
                          type_assurance=assurance_text,
                          numero_assure=numero_assure,
                          mode_paiement=mode_paiement,
-                         structure_nom=structure_info.get('nom', 'Medilogic-GHP'),
-                         structure_adresse=structure_info.get('adresse', ''),
-                         structure_telephone=structure_info.get('telephone', ''),
+                         structure_nom=structure_nom,
+                         structure_adresse=structure_adresse,
+                         structure_telephone=structure_telephone,
                          structure_email=structure_email,
                          date_actuelle=datetime.now().strftime('%d/%m/%Y %H:%M'),
                          nom_fichier=nom_fichier,
                          structure_logo=structure_logo,
-                         nom_caissier=nom_caissier)
+                         nom_caissier=session.get('user_name', ''),
+                         assurance2_nom=assurance2_nom,
+                         taux_assurance2=taux_assurance2,
+                         prise_en_charge2=prise_en_charge2,
+                         numero_assure2=numero_assure2,
+                         assurance2_appliquee=assurance2_appliquee,
+                         taux_modifie=taux_modifie,
+                         taux_original=taux_original)
+
+@app.route('/facture_structure/<int:vente_id>/<string:type>')
+@login_required
+def facture_structure(vente_id, type):
+    from datetime import datetime
+    import json
+    
+    structure_id = session.get('structure_id')
+    
+    if not structure_id:
+        return "Structure non trouvée", 404
+    
+    # Récupérer les infos de la structure
+    structures = sheets_helper.get_all_records('structures', use_prefix=False)
+    structure_info = next((s for s in structures if str(s.get('ID')) == str(structure_id)), {})
+    
+    structure_nom = structure_info.get('nom', 'Medilogic-GHP')
+    structure_adresse = structure_info.get('adresse', '')
+    structure_telephone = structure_info.get('telephone', '')
+    structure_email = structure_info.get('email', '')
+    structure_logo = structure_info.get('logo_url', '')
+    
+    articles = []
+    sous_total = 0
+    taux_assurance = 0
+    prise_en_charge = 0
+    net_a_payer = 0
+    patient_nom = 'Patient'
+    mode_paiement = 'Espèces'
+    type_assurance = 'non_assure'
+    numero_assure = ''
+    patient_id = None
+    
+    # CHAMPS POUR L'ASSURANCE COMPLÉMENTAIRE
+    assurance2_nom = ''
+    taux_assurance2 = 0
+    prise_en_charge2 = 0
+    numero_assure2 = ''
+    
+    # CORRECTION : Accepter 'pharma' et 'pharmacie'
+    type_bd = 'pharmacie' if type == 'pharma' else type
+    
+    # Lire depuis NEON
+    vente = db.execute_query("""
+        SELECT v.*, p.nom, p.prenom, p.type_assurance, p.numero_assure,
+               p.assurance2_nom as patient_assurance2_nom, 
+               p.taux_assurance2 as patient_taux_assurance2, 
+               p.numero_assure2
+        FROM ventes v
+        LEFT JOIN patients p ON v.patient_id = p.id
+        WHERE v.id = %s AND v.structure_id = %s AND v.type = %s
+    """, (vente_id, structure_id, type_bd))
+    
+    if not vente or len(vente) == 0:
+        return f"Vente {vente_id} non trouvée", 404
+    
+    if isinstance(vente[0], dict):
+        v = vente[0]
+        patient_nom = v.get('patient_nom', '')
+        if not patient_nom:
+            patient_nom = f"{v.get('nom', '')} {v.get('prenom', '')}".strip()
+        if not patient_nom:
+            patient_nom = 'Patient'
+        
+        patient_id = v.get('patient_id')
+        mode_paiement = v.get('mode_paiement', 'Espèces')
+        taux_assurance = float(v.get('taux_assurance', 0))
+        prise_en_charge = float(v.get('prise_en_charge', 0))
+        net_a_payer = float(v.get('net_a_payer', 0))
+        sous_total = float(v.get('sous_total', 0))
+        type_assurance = v.get('type_assurance', 'non_assure')
+        numero_assure = v.get('numero_assure', '')
+        
+        # Récupérer les données de l'assurance complémentaire
+        assurance2_nom = v.get('assurance2_nom', '')
+        taux_assurance2 = float(v.get('taux_assurance2', 0))
+        prise_en_charge2 = float(v.get('prise_en_charge2', 0))
+        numero_assure2 = v.get('numero_assure2', '')
+        
+        # Récupérer le taux original du patient
+        patient_taux_original = float(v.get('patient_taux_assurance2', 0))
+        
+        # Déterminer si le taux a été modifié
+        taux_modifie = False
+        taux_original = patient_taux_original
+        
+        if taux_assurance2 > 0 and patient_taux_original > 0:
+            if abs(taux_assurance2 - patient_taux_original) > 0.01:
+                taux_modifie = True
+        
+        # Récupérer les articles
+        if type_bd == 'pharmacie' or type_bd == 'pharma':
+            produits_data = v.get('produits', [])
+            if isinstance(produits_data, str):
+                produits_data = json.loads(produits_data)
+            for p in produits_data:
+                articles.append({
+                    'nom': p.get('nom', 'Produit'),
+                    'quantite': int(p.get('quantite', 1)),
+                    'prix_unitaire': float(p.get('prix_reel', p.get('prix', 0))),
+                    'total': float(p.get('total', 0))
+                })
+        else:
+            actes_data = v.get('actes', [])
+            if isinstance(actes_data, str):
+                actes_data = json.loads(actes_data)
+            for a in actes_data:
+                articles.append({
+                    'nom': a.get('nom', 'Acte'),
+                    'quantite': int(a.get('quantite', 1)),
+                    'prix_unitaire': float(a.get('prix', 0)),
+                    'total': float(a.get('total', 0))
+                })
+    
+    # Gestion des assurances
+    assurance_text = type_assurance
+    if type_assurance == 'amu_cnss':
+        assurance_text = 'AMU-CNSS'
+    elif type_assurance == 'amu_inam':
+        assurance_text = 'AMU-INAM'
+    elif type_assurance == 'non_assure':
+        assurance_text = 'Non assuré'
+    
+    # Déterminer si l'assurance complémentaire a été appliquée
+    assurance2_appliquee = False
+    if assurance2_nom and assurance2_nom != '' and assurance2_nom != 'Aucune' and prise_en_charge2 > 0:
+        assurance2_appliquee = True
+    
+    patient_nom_clean = patient_nom.replace(' ', '_').replace("'", "").replace('é', 'e').replace('è', 'e').replace('ê', 'e').replace('à', 'a').replace('ç', 'c')
+    nom_fichier = f"facture_structure_{patient_nom_clean}_{vente_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    
+    return render_template('facture_structure.html',
+                         vente_id=vente_id,
+                         articles=articles,
+                         sous_total=sous_total,
+                         taux_assurance=taux_assurance,
+                         prise_en_charge=prise_en_charge,
+                         net_a_payer=net_a_payer,
+                         patient_nom=patient_nom,
+                         patient_id=patient_id,
+                         type_assurance=assurance_text,
+                         numero_assure=numero_assure,
+                         mode_paiement=mode_paiement,
+                         structure_nom=structure_nom,
+                         structure_adresse=structure_adresse,
+                         structure_telephone=structure_telephone,
+                         structure_email=structure_email,
+                         date_actuelle=datetime.now().strftime('%d/%m/%Y %H:%M'),
+                         nom_fichier=nom_fichier,
+                         structure_logo=structure_logo,
+                         nom_caissier=session.get('user_name', ''),
+                         assurance2_nom=assurance2_nom,
+                         taux_assurance2=taux_assurance2,
+                         prise_en_charge2=prise_en_charge2,
+                         numero_assure2=numero_assure2,
+                         assurance2_appliquee=assurance2_appliquee,
+                         taux_modifie=taux_modifie,
+                         taux_original=taux_original)
 
 @app.route('/admin_global')
 def admin_global():
@@ -1029,7 +1216,7 @@ def recu(vente_id, type):
     structure_nom = structure_info.get('nom', 'Medilogic-GHP')
     structure_adresse = structure_info.get('adresse', '')
     structure_telephone = structure_info.get('telephone', '')
-    structure_email = structure_info.get('email', '')  # 🔥 AJOUT
+    structure_email = structure_info.get('email', '')
     structure_logo = structure_info.get('logo_url', '')
     
     articles = []
@@ -1042,14 +1229,23 @@ def recu(vente_id, type):
     type_assurance = 'non_assure'
     numero_assure = ''
     
+    # 🔥 CHAMPS POUR L'ASSURANCE COMPLÉMENTAIRE
+    assurance2_nom = ''
+    taux_assurance2 = 0
+    prise_en_charge2 = 0
+    numero_assure2 = ''
+    
     # 🔥 CORRECTION : Accepter 'pharma' et 'pharmacie'
     type_bd = 'pharmacie' if type == 'pharma' else type
     
     print(f"🔍 Recherche vente {vente_id} (type reçu: {type}, type BD: {type_bd})")
     
-    # 🔥 Lire depuis NEON avec le bon type
+    # 🔥 Lire depuis NEON (sans les colonnes qui n'existent pas)
     vente = db.execute_query("""
-        SELECT v.*, p.nom, p.prenom, p.type_assurance, p.numero_assure
+        SELECT v.*, p.nom, p.prenom, p.type_assurance, p.numero_assure,
+               p.assurance2_nom as patient_assurance2_nom, 
+               p.taux_assurance2 as patient_taux_assurance2, 
+               p.numero_assure2
         FROM ventes v
         LEFT JOIN patients p ON v.patient_id = p.id
         WHERE v.id = %s AND v.structure_id = %s AND v.type = %s
@@ -1073,6 +1269,28 @@ def recu(vente_id, type):
         sous_total = float(v.get('sous_total', 0))
         type_assurance = v.get('type_assurance', 'non_assure')
         numero_assure = v.get('numero_assure', '')
+        
+        # 🔥 Récupérer les données de l'assurance complémentaire (depuis la vente)
+        assurance2_nom = v.get('assurance2_nom', '')
+        taux_assurance2 = float(v.get('taux_assurance2', 0))
+        prise_en_charge2 = float(v.get('prise_en_charge2', 0))
+        numero_assure2 = v.get('numero_assure2', '')
+        
+        # 🔥 Récupérer le taux original du patient (pour comparaison)
+        patient_taux_original = float(v.get('patient_taux_assurance2', 0))
+        
+        # 🔥 Déterminer si le taux a été modifié
+        # Si le taux dans la vente est différent du taux du patient (et > 0)
+        taux_modifie = False
+        taux_original = patient_taux_original
+        
+        if taux_assurance2 > 0 and patient_taux_original > 0:
+            # Si les taux sont différents, le taux a été modifié
+            if abs(taux_assurance2 - patient_taux_original) > 0.01:
+                taux_modifie = True
+                print(f"🔴 TAUX MODIFIÉ DÉTECTÉ: {taux_assurance2}% (original: {patient_taux_original}%)")
+        
+        print(f"📊 Données: taux_assurance2_vente={taux_assurance2}, patient_taux_original={patient_taux_original}, taux_modifie={taux_modifie}")
         
         # Récupérer les produits
         if type_bd == 'pharmacie' or type_bd == 'pharma':
@@ -1107,9 +1325,20 @@ def recu(vente_id, type):
     elif type_assurance == 'non_assure':
         assurance_text = 'Non assuré'
     
+    # 🔥 Déterminer si l'assurance complémentaire a été appliquée
+    assurance2_appliquee = False
+    if assurance2_nom and assurance2_nom != '' and assurance2_nom != 'Aucune' and prise_en_charge2 > 0:
+        assurance2_appliquee = True
+    
     print(f"=== REÇU {vente_id} ({type_bd}) ===")
     print(f"Patient: {patient_nom}")
     print(f"Articles: {len(articles)}")
+    print(f"Assurance principale: {assurance_text} ({taux_assurance}%)")
+    print(f"Assurance complémentaire appliquée: {assurance2_appliquee}")
+    if assurance2_appliquee:
+        print(f"  - {assurance2_nom} ({taux_assurance2}%) - {prise_en_charge2} FCFA")
+    if taux_modifie:
+        print(f"  ⚠️ TAUX MODIFIÉ: {taux_assurance2}% (original: {taux_original}%)")
     
     return render_template('recu_client.html',
                          vente_id=vente_id,
@@ -1125,10 +1354,175 @@ def recu(vente_id, type):
                          structure_nom=structure_nom,
                          structure_adresse=structure_adresse,
                          structure_telephone=structure_telephone,
-                         structure_email=structure_email,  # 🔥 AJOUT
+                         structure_email=structure_email,
                          date_actuelle=datetime.now().strftime('%d/%m/%Y %H:%M'),
                          structure_logo=structure_logo,
-                         nom_caissier=session.get('user_name', ''))
+                         nom_caissier=session.get('user_name', ''),
+                         # 🔥 PARAMÈTRES ASSURANCE COMPLÉMENTAIRE
+                         assurance2_nom=assurance2_nom,
+                         taux_assurance2=taux_assurance2,
+                         prise_en_charge2=prise_en_charge2,
+                         numero_assure2=numero_assure2,
+                         assurance2_appliquee=assurance2_appliquee,
+                         # 🔥 PARAMÈTRES DE MODIFICATION (déterminés par comparaison)
+                         taux_modifie=taux_modifie,
+                         taux_original=taux_original)
+
+@app.route('/recu_structure/<int:vente_id>/<string:type>')
+@login_required
+def recu_structure(vente_id, type):
+    """Reçu pour la structure (copie comptable)"""
+    from datetime import datetime
+    import json
+    
+    structure_id = session.get('structure_id')
+    
+    if not structure_id:
+        return "Structure non trouvée", 404
+    
+    # Récupérer les infos de la structure
+    structures = sheets_helper.get_all_records('structures', use_prefix=False)
+    structure_info = next((s for s in structures if str(s.get('ID')) == str(structure_id)), {})
+    
+    structure_nom = structure_info.get('nom', 'Medilogic-GHP')
+    structure_adresse = structure_info.get('adresse', '')
+    structure_telephone = structure_info.get('telephone', '')
+    structure_email = structure_info.get('email', '')
+    structure_logo = structure_info.get('logo_url', '')
+    
+    articles = []
+    sous_total = 0
+    taux_assurance = 0
+    prise_en_charge = 0
+    net_a_payer = 0
+    patient_nom = 'Patient'
+    mode_paiement = 'Espèces'
+    type_assurance = 'non_assure'
+    numero_assure = ''
+    
+    # CHAMPS POUR L'ASSURANCE COMPLÉMENTAIRE
+    assurance2_nom = ''
+    taux_assurance2 = 0
+    prise_en_charge2 = 0
+    numero_assure2 = ''
+    
+    # CORRECTION : Accepter 'pharma' et 'pharmacie'
+    type_bd = 'pharmacie' if type == 'pharma' else type
+    
+    # Lire depuis NEON
+    vente = db.execute_query("""
+        SELECT v.*, p.nom, p.prenom, p.type_assurance, p.numero_assure,
+               p.assurance2_nom as patient_assurance2_nom, 
+               p.taux_assurance2 as patient_taux_assurance2, 
+               p.numero_assure2
+        FROM ventes v
+        LEFT JOIN patients p ON v.patient_id = p.id
+        WHERE v.id = %s AND v.structure_id = %s AND v.type = %s
+    """, (vente_id, structure_id, type_bd))
+    
+    if not vente or len(vente) == 0:
+        return f"Vente {vente_id} non trouvée", 404
+    
+    if isinstance(vente[0], dict):
+        v = vente[0]
+        patient_nom = v.get('patient_nom', '')
+        if not patient_nom:
+            patient_nom = f"{v.get('nom', '')} {v.get('prenom', '')}".strip()
+        if not patient_nom:
+            patient_nom = 'Patient'
+        
+        mode_paiement = v.get('mode_paiement', 'Espèces')
+        taux_assurance = float(v.get('taux_assurance', 0))
+        prise_en_charge = float(v.get('prise_en_charge', 0))
+        net_a_payer = float(v.get('net_a_payer', 0))
+        sous_total = float(v.get('sous_total', 0))
+        type_assurance = v.get('type_assurance', 'non_assure')
+        numero_assure = v.get('numero_assure', '')
+        
+        # Récupérer les données de l'assurance complémentaire
+        assurance2_nom = v.get('assurance2_nom', '')
+        taux_assurance2 = float(v.get('taux_assurance2', 0))
+        prise_en_charge2 = float(v.get('prise_en_charge2', 0))
+        numero_assure2 = v.get('numero_assure2', '')
+        
+        # Récupérer le taux original du patient
+        patient_taux_original = float(v.get('patient_taux_assurance2', 0))
+        
+        # Déterminer si le taux a été modifié
+        taux_modifie = False
+        taux_original = patient_taux_original
+        
+        if taux_assurance2 > 0 and patient_taux_original > 0:
+            if abs(taux_assurance2 - patient_taux_original) > 0.01:
+                taux_modifie = True
+        
+        # Récupérer les articles
+        if type_bd == 'pharmacie' or type_bd == 'pharma':
+            produits_data = v.get('produits', [])
+            if isinstance(produits_data, str):
+                produits_data = json.loads(produits_data)
+            for p in produits_data:
+                articles.append({
+                    'nom': p.get('nom', 'Produit'),
+                    'quantite': int(p.get('quantite', 1)),
+                    'prix_unitaire': float(p.get('prix_reel', p.get('prix', 0))),
+                    'total': float(p.get('total', 0))
+                })
+        else:
+            actes_data = v.get('actes', [])
+            if isinstance(actes_data, str):
+                actes_data = json.loads(actes_data)
+            for a in actes_data:
+                articles.append({
+                    'nom': a.get('nom', 'Acte'),
+                    'quantite': int(a.get('quantite', 1)),
+                    'prix_unitaire': float(a.get('prix', 0)),
+                    'total': float(a.get('total', 0))
+                })
+    
+    # Gestion des assurances
+    assurance_text = type_assurance
+    if type_assurance == 'amu_cnss':
+        assurance_text = 'AMU-CNSS'
+    elif type_assurance == 'amu_inam':
+        assurance_text = 'AMU-INAM'
+    elif type_assurance == 'non_assure':
+        assurance_text = 'Non assuré'
+    
+    # Déterminer si l'assurance complémentaire a été appliquée
+    assurance2_appliquee = False
+    if assurance2_nom and assurance2_nom != '' and assurance2_nom != 'Aucune' and prise_en_charge2 > 0:
+        assurance2_appliquee = True
+    
+    patient_nom_clean = patient_nom.replace(' ', '_').replace("'", "").replace('é', 'e').replace('è', 'e').replace('ê', 'e').replace('à', 'a').replace('ç', 'c')
+    nom_fichier = f"recu_structure_{patient_nom_clean}_{vente_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    
+    return render_template('recu_structure.html',
+                         vente_id=vente_id,
+                         articles=articles,
+                         sous_total=sous_total,
+                         taux_assurance=taux_assurance,
+                         prise_en_charge=prise_en_charge,
+                         net_a_payer=net_a_payer,
+                         patient_nom=patient_nom,
+                         type_assurance=assurance_text,
+                         numero_assure=numero_assure,
+                         mode_paiement=mode_paiement,
+                         structure_nom=structure_nom,
+                         structure_adresse=structure_adresse,
+                         structure_telephone=structure_telephone,
+                         structure_email=structure_email,
+                         date_actuelle=datetime.now().strftime('%d/%m/%Y %H:%M'),
+                         structure_logo=structure_logo,
+                         nom_caissier=session.get('user_name', ''),
+                         nom_fichier=nom_fichier,
+                         assurance2_nom=assurance2_nom,
+                         taux_assurance2=taux_assurance2,
+                         prise_en_charge2=prise_en_charge2,
+                         numero_assure2=numero_assure2,
+                         assurance2_appliquee=assurance2_appliquee,
+                         taux_modifie=taux_modifie,
+                         taux_original=taux_original)
 
 @app.route('/historique_ventes')
 @login_required
@@ -1620,292 +2014,6 @@ def debug_ventes():
     
     return jsonify(result)
 
-# ========== RECU STRUCTURE (COPIE) ==========
-@app.route('/recu_structure/<int:vente_id>/<string:type>')
-@login_required
-def recu_structure(vente_id, type):
-    """Reçu pour la structure (copie comptable) - Lecture depuis Neon"""
-    from datetime import datetime
-    import json
-    
-    structure_id = session.get('structure_id')
-    
-    # Récupérer les infos de la structure depuis Google Sheets
-    structures = sheets_helper.get_all_records('structures', use_prefix=False)
-    structure_info = next((s for s in structures if str(s.get('ID')) == str(structure_id)), {})
-    
-    articles = []
-    sous_total = 0
-    taux_assurance = 0
-    prise_en_charge = 0
-    net_a_payer = 0
-    patient_nom = 'Patient'
-    mode_paiement = 'Espèces'
-    type_assurance = 'non_assure'
-    patient_id = None
-    
-    # 🔥 Lire depuis NEON
-    vente = db.execute_query("""
-        SELECT v.*, p.nom, p.prenom, p.type_assurance, p.numero_assure
-        FROM ventes v
-        LEFT JOIN patients p ON v.patient_id = p.id
-        WHERE v.id = %s AND v.structure_id = %s AND v.type = %s
-    """, (vente_id, structure_id, type))
-    
-    if not vente or len(vente) == 0:
-        return f"Vente {vente_id} non trouvée", 404
-    
-    if isinstance(vente[0], dict):
-        v = vente[0]
-        patient_nom = v.get('patient_nom', '')
-        if not patient_nom:
-            patient_nom = f"{v.get('nom', '')} {v.get('prenom', '')}".strip()
-        if not patient_nom:
-            patient_nom = 'Patient'
-        
-        patient_id = v.get('patient_id')
-        mode_paiement = v.get('mode_paiement', 'Espèces')
-        taux_assurance = float(v.get('taux_assurance', 0))
-        prise_en_charge = float(v.get('prise_en_charge', 0))
-        net_a_payer = float(v.get('net_a_payer', 0))
-        sous_total = float(v.get('sous_total', 0))
-        type_assurance = v.get('type_assurance', 'non_assure')
-        
-        # Récupérer les articles
-        if type == 'actes':
-            actes_data = v.get('actes', [])
-            if isinstance(actes_data, str):
-                actes_data = json.loads(actes_data)
-            for a in actes_data:
-                articles.append({
-                    'nom': a.get('nom', 'Acte'),
-                    'quantite': int(a.get('quantite', 1)),
-                    'total': float(a.get('total', 0))
-                })
-        else:
-            produits_data = v.get('produits', [])
-            if isinstance(produits_data, str):
-                produits_data = json.loads(produits_data)
-            for p in produits_data:
-                articles.append({
-                    'nom': p.get('nom', 'Produit'),
-                    'quantite': int(p.get('quantite', 1)),
-                    'total': float(p.get('total', 0))
-                })
-    else:
-        v = vente[0]
-        patient_nom = v[2] if len(v) > 2 and v[2] else ''
-        if not patient_nom and len(v) > 12:
-            patient_nom = f"{v[12] or ''} {v[13] or ''}".strip()
-        if not patient_nom:
-            patient_nom = 'Patient'
-        
-        patient_id = v[1] if len(v) > 1 else None
-        mode_paiement = v[7] if len(v) > 7 else 'Espèces'
-        taux_assurance = float(v[10]) if len(v) > 10 else 0
-        prise_en_charge = float(v[5]) if len(v) > 5 else 0
-        net_a_payer = float(v[6]) if len(v) > 6 else 0
-        sous_total = float(v[4]) if len(v) > 4 else 0
-        type_assurance = v[14] if len(v) > 14 else 'non_assure'
-        
-        # Récupérer les articles
-        if type == 'actes' and len(v) > 10:
-            actes_data = v[10]
-            if isinstance(actes_data, str):
-                actes_data = json.loads(actes_data)
-            for a in actes_data:
-                articles.append({
-                    'nom': a.get('nom', 'Acte'),
-                    'quantite': int(a.get('quantite', 1)),
-                    'total': float(a.get('total', 0))
-                })
-        elif type == 'pharmacie' and len(v) > 11:
-            produits_data = v[11]
-            if isinstance(produits_data, str):
-                produits_data = json.loads(produits_data)
-            for p in produits_data:
-                articles.append({
-                    'nom': p.get('nom', 'Produit'),
-                    'quantite': int(p.get('quantite', 1)),
-                    'total': float(p.get('total', 0))
-                })
-    
-    # Gestion des assurances
-    assurance_text = 'Non assuré'
-    if type_assurance == 'amu_cnss':
-        assurance_text = 'AMU-CNSS'
-    elif type_assurance == 'amu_inam':
-        assurance_text = 'AMU-INAM'
-    elif type_assurance and type_assurance not in ['non_assure', 'amu_cnss', 'amu_inam']:
-        assurance_text = type_assurance
-    
-    patient_nom_clean = patient_nom.replace(' ', '_').replace("'", "").replace('é', 'e').replace('è', 'e').replace('ê', 'e').replace('à', 'a').replace('ç', 'c')
-    nom_fichier = f"recu_structure_{patient_nom_clean}_{vente_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    
-    return render_template('recu_structure.html',
-                         vente_id=vente_id,
-                         articles=articles,
-                         sous_total=sous_total,
-                         taux_assurance=taux_assurance,
-                         prise_en_charge=prise_en_charge,
-                         net_a_payer=net_a_payer,
-                         patient_nom=patient_nom,
-                         type_assurance=assurance_text,
-                         mode_paiement=mode_paiement,
-                         structure_nom=structure_info.get('nom', 'Medilogic-GHP'),
-                         date_actuelle=datetime.now().strftime('%d/%m/%Y %H:%M'),
-                         nom_fichier=nom_fichier,
-                         structure_logo=structure_info.get('logo_url', ''),
-                         nom_caissier=session.get('user_name', ''))
-
-
-@app.route('/facture_structure/<int:vente_id>/<string:type>')
-@login_required
-def facture_structure(vente_id, type):
-    """Facture pour la structure (archive) - Lecture depuis Neon"""
-    from datetime import datetime
-    import json
-    
-    structure_id = session.get('structure_id')
-    
-    # Récupérer les infos de la structure depuis Google Sheets
-    structures = sheets_helper.get_all_records('structures', use_prefix=False)
-    structure_info = next((s for s in structures if str(s.get('ID')) == str(structure_id)), {})
-    
-    articles = []
-    sous_total = 0
-    taux_assurance = 0
-    prise_en_charge = 0
-    net_a_payer = 0
-    patient_nom = 'Patient'
-    mode_paiement = 'Espèces'
-    type_assurance = 'non_assure'
-    numero_assure = ''
-    patient_id = None
-    
-    # 🔥 Lire depuis NEON
-    vente = db.execute_query("""
-        SELECT v.*, p.nom, p.prenom, p.type_assurance, p.numero_assure
-        FROM ventes v
-        LEFT JOIN patients p ON v.patient_id = p.id
-        WHERE v.id = %s AND v.structure_id = %s AND v.type = %s
-    """, (vente_id, structure_id, type))
-    
-    if not vente or len(vente) == 0:
-        return f"Vente {vente_id} non trouvée", 404
-    
-    if isinstance(vente[0], dict):
-        v = vente[0]
-        patient_nom = v.get('patient_nom', '')
-        if not patient_nom:
-            patient_nom = f"{v.get('nom', '')} {v.get('prenom', '')}".strip()
-        if not patient_nom:
-            patient_nom = 'Patient'
-        
-        patient_id = v.get('patient_id')
-        mode_paiement = v.get('mode_paiement', 'Espèces')
-        taux_assurance = float(v.get('taux_assurance', 0))
-        prise_en_charge = float(v.get('prise_en_charge', 0))
-        net_a_payer = float(v.get('net_a_payer', 0))
-        sous_total = float(v.get('sous_total', 0))
-        type_assurance = v.get('type_assurance', 'non_assure')
-        numero_assure = v.get('numero_assure', '')
-        
-        # Récupérer les articles avec prix unitaire
-        if type == 'actes':
-            actes_data = v.get('actes', [])
-            if isinstance(actes_data, str):
-                actes_data = json.loads(actes_data)
-            for a in actes_data:
-                articles.append({
-                    'nom': a.get('nom', 'Acte'),
-                    'quantite': int(a.get('quantite', 1)),
-                    'prix_unitaire': float(a.get('prix', 0)),
-                    'total': float(a.get('total', 0))
-                })
-        else:
-            produits_data = v.get('produits', [])
-            if isinstance(produits_data, str):
-                produits_data = json.loads(produits_data)
-            for p in produits_data:
-                articles.append({
-                    'nom': p.get('nom', 'Produit'),
-                    'quantite': int(p.get('quantite', 1)),
-                    'prix_unitaire': float(p.get('prix_reel', p.get('prix', 0))),
-                    'total': float(p.get('total', 0))
-                })
-    else:
-        v = vente[0]
-        patient_nom = v[2] if len(v) > 2 and v[2] else ''
-        if not patient_nom and len(v) > 12:
-            patient_nom = f"{v[12] or ''} {v[13] or ''}".strip()
-        if not patient_nom:
-            patient_nom = 'Patient'
-        
-        patient_id = v[1] if len(v) > 1 else None
-        mode_paiement = v[7] if len(v) > 7 else 'Espèces'
-        taux_assurance = float(v[10]) if len(v) > 10 else 0
-        prise_en_charge = float(v[5]) if len(v) > 5 else 0
-        net_a_payer = float(v[6]) if len(v) > 6 else 0
-        sous_total = float(v[4]) if len(v) > 4 else 0
-        type_assurance = v[14] if len(v) > 14 else 'non_assure'
-        numero_assure = v[15] if len(v) > 15 else ''
-        
-        # Récupérer les articles
-        if type == 'actes' and len(v) > 10:
-            actes_data = v[10]
-            if isinstance(actes_data, str):
-                actes_data = json.loads(actes_data)
-            for a in actes_data:
-                articles.append({
-                    'nom': a.get('nom', 'Acte'),
-                    'quantite': int(a.get('quantite', 1)),
-                    'prix_unitaire': float(a.get('prix', 0)),
-                    'total': float(a.get('total', 0))
-                })
-        elif type == 'pharmacie' and len(v) > 11:
-            produits_data = v[11]
-            if isinstance(produits_data, str):
-                produits_data = json.loads(produits_data)
-            for p in produits_data:
-                articles.append({
-                    'nom': p.get('nom', 'Produit'),
-                    'quantite': int(p.get('quantite', 1)),
-                    'prix_unitaire': float(p.get('prix_reel', p.get('prix', 0))),
-                    'total': float(p.get('total', 0))
-                })
-    
-    # Gestion des assurances
-    assurance_text = 'Non assuré'
-    if type_assurance == 'amu_cnss':
-        assurance_text = 'AMU-CNSS'
-    elif type_assurance == 'amu_inam':
-        assurance_text = 'AMU-INAM'
-    elif type_assurance and type_assurance not in ['non_assure', 'amu_cnss', 'amu_inam']:
-        assurance_text = type_assurance
-    
-    patient_nom_clean = patient_nom.replace(' ', '_').replace("'", "").replace('é', 'e').replace('è', 'e').replace('ê', 'e').replace('à', 'a').replace('ç', 'c')
-    nom_fichier = f"facture_structure_{patient_nom_clean}_{vente_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    
-    return render_template('facture_structure.html',
-                         vente_id=vente_id,
-                         articles=articles,
-                         sous_total=sous_total,
-                         taux_assurance=taux_assurance,
-                         prise_en_charge=prise_en_charge,
-                         net_a_payer=net_a_payer,
-                         patient_nom=patient_nom,
-                         type_assurance=assurance_text,
-                         numero_assure=numero_assure,
-                         mode_paiement=mode_paiement,
-                         structure_nom=structure_info.get('nom', 'Medilogic-GHP'),
-                         structure_adresse=structure_info.get('adresse', ''),
-                         structure_telephone=structure_info.get('telephone', ''),
-                         date_actuelle=datetime.now().strftime('%d/%m/%Y %H:%M'),
-                         nom_fichier=nom_fichier,
-                         structure_logo=structure_info.get('logo_url', ''),
-                         nom_caissier=session.get('user_name', ''))
-                     
 
 # ========== RENDEZ-VOUS ==========
 @app.route('/rendez_vous')
@@ -2850,19 +2958,26 @@ def api_update_patient(patient_id):
         data = request.json
         structure_id = session.get('structure_id')
         
+        # 🔥 Ajouter les colonnes de l'assurance complémentaire
         db.execute_query("""
             UPDATE patients 
             SET nom = %s, prenom = %s, telephone = %s, adresse = %s,
-                type_assurance = %s, taux_prise_charge = %s, numero_assure = %s
+                date_naissance = %s,
+                type_assurance = %s, taux_prise_charge = %s, numero_assure = %s,
+                assurance2_nom = %s, taux_assurance2 = %s, numero_assure2 = %s
             WHERE id = %s AND structure_id = %s
         """, (
             data.get('nom'),
             data.get('prenom', ''),
             data.get('telephone'),
             data.get('adresse', ''),
+            data.get('date_naissance', ''),
             data.get('type_assurance', 'non_assure'),
             data.get('taux_prise_charge', 0),
             data.get('numero_assure', ''),
+            data.get('assurance2_nom'),
+            data.get('taux_assurance2', 0),
+            data.get('numero_assure2'),
             patient_id,
             structure_id
         ))
@@ -3230,6 +3345,29 @@ def api_vente_pharma():
         if not patient_id:
             return jsonify({'success': False, 'error': 'ID patient manquant'}), 400
         
+        # 🔥 Récupérer les données des assurances
+        taux_assurance = float(data.get('taux_assurance', 0))
+        assurance2_nom = data.get('assurance2_nom', '')
+        taux_assurance2 = float(data.get('taux_assurance2', 0))
+        prise_en_charge = float(data.get('prise_en_charge', 0))
+        prise_en_charge2 = float(data.get('prise_en_charge2', 0))
+        
+        # 🔥 Construire l'objet assurances pour le JSONB
+        assurances_data = {
+            'principale': {
+                'nom': data.get('assurance_nom', 'Assurance'),
+                'taux': taux_assurance,
+                'montant_prise_en_charge': prise_en_charge
+            },
+            'complementaire': {
+                'nom': assurance2_nom,
+                'taux': taux_assurance2,
+                'montant_prise_en_charge': prise_en_charge2
+            } if assurance2_nom and taux_assurance2 > 0 else None
+        }
+        
+        print(f"📊 Assurances: {assurances_data}")
+        
         # ========== 1. ENREGISTRER LA VENTE DANS NEON ==========
         result = db.execute_query("""
             INSERT INTO ventes (
@@ -3245,9 +3383,13 @@ def api_vente_pharma():
                 date_vente, 
                 produits, 
                 created_by_nom,
-                statut
+                statut,
+                assurances,
+                assurance2_nom,
+                taux_assurance2,
+                prise_en_charge2
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s::jsonb, %s, 'validee')
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s::jsonb, %s, 'validee', %s::jsonb, %s, %s, %s)
             RETURNING id
         """, (
             patient_id,
@@ -3255,12 +3397,16 @@ def api_vente_pharma():
             structure_id,
             'pharmacie',
             float(data.get('sous_total', 0)),
-            float(data.get('prise_en_charge', 0)),
+            prise_en_charge,
             float(data.get('net_a_payer', 0)),
             data.get('mode_paiement', 'especes'),
-            float(data.get('taux_assurance', 0)),
+            taux_assurance,
             json.dumps(data.get('produits', []), ensure_ascii=False),
-            vendeur
+            vendeur,
+            json.dumps(assurances_data, ensure_ascii=False),
+            assurance2_nom,
+            taux_assurance2,
+            prise_en_charge2
         ))
         
         if not result or len(result) == 0:
@@ -3270,7 +3416,7 @@ def api_vente_pharma():
         vente_id = result[0]['id']
         print(f"✅ Vente pharmacie enregistrée dans Neon avec ID: {vente_id}")
         
-        # ========== 2. AJOUTER LA RECETTE DANS NEON ==========
+        # ========== 2. AJOUTER LA RECETTE PATIENT ==========
         net_a_payer = float(data.get('net_a_payer', 0))
         if net_a_payer > 0:
             recette_result = db.execute_query("""
@@ -3297,11 +3443,39 @@ def api_vente_pharma():
             ))
             
             if recette_result and len(recette_result) > 0:
-                print(f"✅ Recette ajoutée avec ID: {recette_result[0]['id']} pour {net_a_payer} FCFA")
+                print(f"✅ Recette patient ajoutée: {net_a_payer} FCFA")
             else:
-                print("⚠️ Erreur lors de l'insertion de la recette")
+                print("⚠️ Erreur lors de l'insertion de la recette patient")
         
-        # ========== 3. METTRE À JOUR LE STOCK DANS GOOGLE SHEETS ==========
+        # ========== 3. AJOUTER LA RECETTE ASSURANCE COMPLÉMENTAIRE ==========
+        if assurance2_nom and taux_assurance2 > 0 and prise_en_charge2 > 0:
+            recette_assurance2 = db.execute_query("""
+                INSERT INTO recettes (
+                    structure_id, 
+                    montant, 
+                    source, 
+                    source_id, 
+                    source_type, 
+                    description, 
+                    created_by_nom,
+                    date_recette
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                RETURNING id
+            """, (
+                structure_id,
+                prise_en_charge2,
+                'assurance',
+                vente_id,
+                'vente_pharma',
+                f'Prise en charge {assurance2_nom} pour vente pharmacie #{vente_id} - ' + data.get('patient_nom', 'Patient'),
+                vendeur
+            ))
+            
+            if recette_assurance2 and len(recette_assurance2) > 0:
+                print(f"✅ Recette assurance {assurance2_nom} ajoutée: {prise_en_charge2} FCFA")
+        
+        # ========== 4. METTRE À JOUR LE STOCK DANS GOOGLE SHEETS ==========
         try:
             sheet_name = f"struct_{structure_id}_produits"
             print(f"   📂 Accès à la feuille: {sheet_name}")
@@ -3325,12 +3499,10 @@ def api_vente_pharma():
                     
                     if nouveau_stock < 0:
                         print(f"   ⚠️ Stock négatif! {produit_nom}: {stock_actuel} - {quantite_vendue} = {nouveau_stock}")
-                        # On force à 0 pour éviter les stocks négatifs
                         nouveau_stock = 0
                     
                     print(f"   📊 Stock: {stock_actuel} → {nouveau_stock}")
                     
-                    # Mettre à jour la cellule du stock (colonne D = index 4)
                     worksheet.update_cell(row_num, 4, nouveau_stock)
                     print(f"   ✅ Stock Sheets mis à jour pour {produit_nom}")
                 else:
@@ -3342,9 +3514,8 @@ def api_vente_pharma():
             import traceback
             traceback.print_exc()
         
-        # ========== 4. METTRE À JOUR LE SOLDE DE CAISSE ==========
+        # ========== 5. METTRE À JOUR LE SOLDE DE CAISSE ==========
         try:
-            # Recalculer le solde total
             recettes_total = db.execute_query("""
                 SELECT COALESCE(SUM(montant), 0) as total 
                 FROM recettes 
@@ -3601,6 +3772,28 @@ def api_add_acte_vente():
         if not patient_id:
             return jsonify({'success': False, 'error': 'ID patient manquant'}), 400
         
+        # 🔥 Récupérer les données des assurances
+        taux_assurance = float(data.get('taux_assurance', 0))
+        assurance2_nom = data.get('assurance2_nom', '')
+        taux_assurance2 = float(data.get('taux_assurance2', 0))
+        prise_en_charge2 = float(data.get('prise_en_charge2', 0))
+        
+        # 🔥 Construire l'objet assurances pour le JSONB
+        assurances_data = {
+            'principale': {
+                'nom': data.get('assurance_nom', 'Assurance'),
+                'taux': taux_assurance,
+                'montant_prise_en_charge': float(data.get('prise_en_charge', 0))
+            },
+            'complementaire': {
+                'nom': assurance2_nom,
+                'taux': taux_assurance2,
+                'montant_prise_en_charge': prise_en_charge2
+            } if assurance2_nom and taux_assurance2 > 0 else None
+        }
+        
+        print(f"📊 Assurances: {assurances_data}")
+        
         result = db.execute_query("""
             INSERT INTO ventes (
                 patient_id, 
@@ -3614,9 +3807,13 @@ def api_add_acte_vente():
                 taux_assurance, 
                 date_vente, 
                 actes,
-                created_by_nom
+                created_by_nom,
+                assurances,
+                assurance2_nom,
+                taux_assurance2,
+                prise_en_charge2
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s::jsonb, %s, %s, %s)
             RETURNING id
         """, (
             patient_id,
@@ -3627,16 +3824,20 @@ def api_add_acte_vente():
             float(data.get('prise_en_charge', 0)),
             float(data.get('net_a_payer', 0)),
             data.get('mode_paiement', 'especes'),
-            float(data.get('taux_assurance', 0)),
+            taux_assurance,
             json.dumps(data.get('actes', []), ensure_ascii=False),
-            user_name
+            user_name,
+            json.dumps(assurances_data, ensure_ascii=False),
+            assurance2_nom,
+            taux_assurance2,
+            prise_en_charge2
         ))
         
         if result and len(result) > 0:
             vente_id = result[0]['id']
             print(f"Vente actes inseree ID: {vente_id} par {user_name}")
             
-            # Ajout automatique de la recette
+            # 🔥 Ajout automatique de la recette (net à payer = ce que le patient paie réellement)
             net_a_payer = float(data.get('net_a_payer', 0))
             if net_a_payer > 0:
                 db.execute_query("""
@@ -3652,6 +3853,22 @@ def api_add_acte_vente():
                     user_name
                 ))
                 print(f"Recette ajoutee: {net_a_payer} FCFA")
+            
+            # 🔥 Si une assurance complémentaire a pris en charge, ajouter une recette séparée
+            if assurance2_nom and taux_assurance2 > 0 and prise_en_charge2 > 0:
+                db.execute_query("""
+                    INSERT INTO recettes (structure_id, montant, source, source_id, source_type, description, created_by_nom)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    structure_id,
+                    prise_en_charge2,
+                    'assurance',
+                    vente_id,
+                    'vente_acte',
+                    f'Prise en charge {assurance2_nom} pour vente actes #{vente_id} - ' + data.get('patient_nom', 'Patient'),
+                    user_name
+                ))
+                print(f"Recette assurance {assurance2_nom} ajoutee: {prise_en_charge2} FCFA")
             
             return jsonify({'success': True, 'vente_id': vente_id})
         else:
@@ -3670,11 +3887,13 @@ def api_get_all_ventes():
     try:
         structure_id = session.get('structure_id')
         
-        # 🔥 Récupérer UNIQUEMENT les ventes non annulées
+        # 🔥 Ajouter les colonnes des assurances complémentaires
         ventes = db.execute_query("""
             SELECT 
                 id, patient_nom, type, net_a_payer, taux_assurance, 
-                date_vente, actes, produits, created_by_nom, statut
+                date_vente, actes, produits, created_by_nom, statut,
+                assurance2_nom, taux_assurance2, prise_en_charge2,
+                assurances
             FROM ventes 
             WHERE structure_id = %s 
             AND (statut IS NULL OR statut != 'annulee')
@@ -3707,7 +3926,7 @@ def api_get_all_ventes():
                                 articles.append(nom)
                         detail = ", ".join(articles)
                 
-                # Pour la pharmacie (accepter 'pharma' ET 'pharmacie')
+                # Pour la pharmacie
                 elif v.get('type') in ['pharma', 'pharmacie'] and v.get('produits'):
                     produits_data = v.get('produits')
                     if isinstance(produits_data, str):
@@ -3728,7 +3947,19 @@ def api_get_all_ventes():
                     else:
                         detail = '-'
                 
-                # Ajouter la vente au résultat
+                # 🔥 Récupérer les infos des assurances
+                assurance2_nom = v.get('assurance2_nom', '')
+                taux_assurance2 = v.get('taux_assurance2', 0)
+                prise_en_charge2 = v.get('prise_en_charge2', 0)
+                
+                # Récupérer les assurances depuis le JSONB
+                assurances = v.get('assurances')
+                if isinstance(assurances, str):
+                    try:
+                        assurances = json.loads(assurances)
+                    except:
+                        assurances = None
+                
                 result.append({
                     'ID': v.get('id'),
                     'patient_nom': v.get('patient_nom', 'Patient'),
@@ -3738,7 +3969,11 @@ def api_get_all_ventes():
                     'date': str(v.get('date_vente', '')),
                     'detail': detail if detail else '-',
                     'created_by_nom': v.get('created_by_nom', None),
-                    'statut': v.get('statut', 'validee')
+                    'statut': v.get('statut', 'validee'),
+                    'assurance2_nom': assurance2_nom,
+                    'taux_assurance2': float(taux_assurance2 or 0),
+                    'prise_en_charge2': float(prise_en_charge2 or 0),
+                    'assurances': assurances
                 })
             else:
                 # Format tuple
@@ -3769,6 +4004,17 @@ def api_get_all_ventes():
                         articles = [f"{p.get('nom', 'Produit')} x{p.get('quantite', 1)}" for p in produits_data]
                         detail = ", ".join(articles)
                 
+                # 🔥 Récupérer les infos des assurances (tuple)
+                assurance2_nom = v[13] if len(v) > 13 else ''
+                taux_assurance2 = v[14] if len(v) > 14 else 0
+                prise_en_charge2 = v[15] if len(v) > 15 else 0
+                assurances = v[16] if len(v) > 16 else None
+                if isinstance(assurances, str):
+                    try:
+                        assurances = json.loads(assurances)
+                    except:
+                        assurances = None
+                
                 result.append({
                     'ID': v[0],
                     'patient_nom': v[2] if len(v) > 2 else 'Patient',
@@ -3778,7 +4024,11 @@ def api_get_all_ventes():
                     'date': str(v[10]) if len(v) > 10 else '',
                     'detail': detail if detail else '-',
                     'created_by_nom': v[13] if len(v) > 13 else None,
-                    'statut': v[16] if len(v) > 16 else 'validee'
+                    'statut': v[16] if len(v) > 16 else 'validee',
+                    'assurance2_nom': assurance2_nom,
+                    'taux_assurance2': float(taux_assurance2 or 0),
+                    'prise_en_charge2': float(prise_en_charge2 or 0),
+                    'assurances': assurances
                 })
         
         return jsonify(result)
@@ -4518,6 +4768,7 @@ def generer_factures_assurance():
         import calendar
         import json
         from datetime import datetime
+        from decimal import Decimal
         
         data = request.json
         structure_id = session.get('structure_id')
@@ -4533,7 +4784,7 @@ def generer_factures_assurance():
         
         print(f"Periode: du {date_debut} au {date_fin}")
         
-        # 🔥 Recuperer les ventes AVEC assurance ET NON ANNULEES
+        # 🔥 RECUPERER LES VENTES AVEC LES DEUX ASSURANCES
         ventes = db.execute_query("""
             SELECT 
                 v.id,
@@ -4542,17 +4793,25 @@ def generer_factures_assurance():
                 v.net_a_payer,
                 v.taux_assurance,
                 v.date_vente,
-                p.type_assurance as assurance
+                v.assurance2_nom,
+                v.taux_assurance2,
+                v.prise_en_charge,
+                v.prise_en_charge2,
+                v.assurances,
+                p.type_assurance as assurance_principale,
+                p.assurance2_nom as assurance2_patient
             FROM ventes v
-            JOIN patients p ON v.patient_id = p.id
+            LEFT JOIN patients p ON v.patient_id = p.id
             WHERE v.structure_id = %s 
             AND v.date_vente >= %s 
             AND v.date_vente <= %s
             AND (v.statut IS NULL OR v.statut != 'annulee')
-            AND v.taux_assurance > 0
-            AND p.type_assurance IS NOT NULL 
-            AND p.type_assurance != 'non_assure'
-            ORDER BY p.type_assurance
+            AND (
+                (p.type_assurance IS NOT NULL AND p.type_assurance != 'non_assure')
+                OR (p.assurance2_nom IS NOT NULL AND p.assurance2_nom != '')
+                OR (v.assurance2_nom IS NOT NULL AND v.assurance2_nom != '')
+            )
+            ORDER BY p.type_assurance, p.assurance2_nom
         """, (structure_id, date_debut, date_fin))
         
         print(f"Ventes avec assurance trouvees: {len(ventes)}")
@@ -4563,28 +4822,57 @@ def generer_factures_assurance():
         factures_par_assurance = {}
         
         for v in ventes:
-            assurance = v.get('assurance')
-            if not assurance:
-                continue
-            
-            if assurance not in factures_par_assurance:
-                factures_par_assurance[assurance] = {
-                    'total': 0,
-                    'ventes': []
-                }
-            
-            sous_total = float(v.get('sous_total') or 0)
-            net_a_payer = float(v.get('net_a_payer') or 0)
-            montant_assurance = sous_total - net_a_payer
-            
-            if montant_assurance > 0:
-                factures_par_assurance[assurance]['total'] += montant_assurance
-                factures_par_assurance[assurance]['ventes'].append({
-                    'id': v.get('id'),
-                    'patient_nom': v.get('patient_nom'),
-                    'montant_assurance': montant_assurance,
-                    'date_vente': str(v.get('date_vente'))
-                })
+            if isinstance(v, dict):
+                # 🔥 Récupérer les infos des deux assurances
+                assurance_principale = v.get('assurance_principale') or v.get('assurance')
+                assurance2 = v.get('assurance2_nom') or v.get('assurance2_patient') or ''
+                
+                # 🔥 Convertir les Decimal en float
+                sous_total = float(v.get('sous_total') or 0)
+                prise_en_charge = float(v.get('prise_en_charge') or 0)
+                prise_en_charge2 = float(v.get('prise_en_charge2') or 0)
+                
+                # 🔥 SI L'ASSURANCE PRINCIPALE EST 'non_assure' OU NULL, ON L'IGNORE
+                if assurance_principale and assurance_principale != 'non_assure':
+                    if assurance_principale not in factures_par_assurance:
+                        factures_par_assurance[assurance_principale] = {
+                            'total': 0,
+                            'ventes': [],
+                            'type': 'principale'
+                        }
+                    
+                    if prise_en_charge > 0:
+                        factures_par_assurance[assurance_principale]['total'] += prise_en_charge
+                        factures_par_assurance[assurance_principale]['ventes'].append({
+                            'id': v.get('id'),
+                            'patient_nom': v.get('patient_nom'),
+                            'montant_assurance': prise_en_charge,
+                            'taux_assurance': float(v.get('taux_assurance', 0)),  # 🔥 Conversion
+                            'date_vente': str(v.get('date_vente')),
+                            'type': 'principale'
+                        })
+                
+                # 🔥 SI L'ASSURANCE COMPLÉMENTAIRE EXISTE
+                if assurance2 and assurance2 != '' and assurance2 != 'Aucune':
+                    if assurance2 not in factures_par_assurance:
+                        factures_par_assurance[assurance2] = {
+                            'total': 0,
+                            'ventes': [],
+                            'type': 'complementaire'
+                        }
+                    
+                    if prise_en_charge2 > 0:
+                        factures_par_assurance[assurance2]['total'] += prise_en_charge2
+                        factures_par_assurance[assurance2]['ventes'].append({
+                            'id': v.get('id'),
+                            'patient_nom': v.get('patient_nom'),
+                            'montant_assurance': prise_en_charge2,
+                            'taux_assurance': float(v.get('taux_assurance2', 0)),  # 🔥 Conversion
+                            'date_vente': str(v.get('date_vente')),
+                            'type': 'complementaire'
+                        })
+        
+        print(f"Factures a generer: {len(factures_par_assurance)}")
         
         resultats = []
         
@@ -4592,9 +4880,10 @@ def generer_factures_assurance():
             if data_assurance['total'] == 0:
                 continue
             
-            # Verifier si une facture existe deja
+            # 🔥 VERIFIER SI UNE FACTURE EXISTE DEJA
             existing = db.execute_query("""
-                SELECT id, montant_rembourse FROM factures_assurance 
+                SELECT id, montant_rembourse 
+                FROM factures_assurance 
                 WHERE structure_id = %s AND mois_reference = %s AND assurance = %s
             """, (structure_id, mois_reference, assurance))
             
@@ -4602,6 +4891,7 @@ def generer_factures_assurance():
                 facture_id = existing[0]['id']
                 deja_rembourse = float(existing[0]['montant_rembourse'] or 0)
                 nouveau_total = data_assurance['total']
+                type_assurance = data_assurance['type']
                 
                 if deja_rembourse >= nouveau_total:
                     nouveau_statut = 'payee'
@@ -4614,30 +4904,48 @@ def generer_factures_assurance():
                     UPDATE factures_assurance 
                     SET montant_total = %s, 
                         details = %s,
-                        statut = %s
+                        statut = %s,
+                        type_assurance = %s,
+                        updated_at = NOW()
                     WHERE id = %s
-                """, (nouveau_total, json.dumps(data_assurance['ventes']), nouveau_statut, facture_id))
+                """, (nouveau_total, json.dumps(data_assurance['ventes']), nouveau_statut, type_assurance, facture_id))
                 
                 resultats.append({
                     'assurance': assurance, 
                     'montant': nouveau_total, 
                     'statut': 'mise_a_jour',
-                    'reste': nouveau_total - deja_rembourse
+                    'reste': nouveau_total - deja_rembourse,
+                    'type': type_assurance
                 })
             else:
                 result = db.execute_query("""
-                    INSERT INTO factures_assurance (structure_id, mois_reference, assurance, montant_total, details)
-                    VALUES (%s, %s, %s, %s, %s)
+                    INSERT INTO factures_assurance (
+                        structure_id, 
+                        mois_reference, 
+                        assurance, 
+                        montant_total, 
+                        details,
+                        type_assurance,
+                        created_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, NOW())
                     RETURNING id
-                """, (structure_id, mois_reference, assurance, data_assurance['total'], json.dumps(data_assurance['ventes'])))
+                """, (structure_id, mois_reference, assurance, data_assurance['total'], json.dumps(data_assurance['ventes']), data_assurance['type']))
+                
                 resultats.append({
                     'assurance': assurance, 
                     'montant': data_assurance['total'], 
                     'statut': 'nouvelle', 
-                    'id': result[0]['id']
+                    'id': result[0]['id'],
+                    'type': data_assurance['type']
                 })
         
-        return jsonify({'success': True, 'factures': resultats, 'total_ventes': len(ventes)})
+        return jsonify({
+            'success': True, 
+            'factures': resultats, 
+            'total_ventes': len(ventes),
+            'total_factures': len(factures_par_assurance)
+        })
         
     except Exception as e:
         print(f"Erreur: {e}")
@@ -4648,20 +4956,88 @@ def generer_factures_assurance():
 @app.route('/api/assurances/factures')
 @login_required
 def api_get_factures_assurance():
-    structure_id = session.get('structure_id')
-    mois = request.args.get('mois')
-    
-    query = "SELECT * FROM factures_assurance WHERE structure_id = %s"
-    params = [structure_id]
-    
-    if mois:
-        query += " AND mois_reference = %s"
-        params.append(mois)
-    
-    query += " ORDER BY mois_reference DESC, assurance"
-    
-    factures = db.execute_query(query, params)
-    return jsonify(factures)
+    try:
+        structure_id = session.get('structure_id')
+        mois = request.args.get('mois')
+        
+        # 🔥 AJOUTER LA COLONNE type_assurance
+        query = """
+            SELECT 
+                id, 
+                structure_id, 
+                mois_reference, 
+                assurance, 
+                montant_total, 
+                montant_rembourse, 
+                statut, 
+                details,
+                type_assurance,
+                created_at,
+                date_remboursement,
+                updated_at
+            FROM factures_assurance 
+            WHERE structure_id = %s
+        """
+        params = [structure_id]
+        
+        if mois:
+            query += " AND mois_reference = %s"
+            params.append(mois)
+        
+        query += " ORDER BY mois_reference DESC, assurance"
+        
+        factures = db.execute_query(query, params)
+        
+        # 🔥 FORMATER LES DONNÉES POUR L'AFFICHAGE
+        result = []
+        for f in factures:
+            if isinstance(f, dict):
+                # Récupérer le type d'assurance
+                type_assurance = f.get('type_assurance', 'principale')
+                assurance_name = f.get('assurance', '')
+                
+                # Ajouter un label pour le type
+                type_label = 'Principale' if type_assurance == 'principale' else 'Complémentaire'
+                
+                result.append({
+                    'id': f.get('id'),
+                    'mois_reference': f.get('mois_reference'),
+                    'assurance': assurance_name,
+                    'type_assurance': type_assurance,
+                    'type_label': type_label,
+                    'montant_total': float(f.get('montant_total', 0)),
+                    'montant_rembourse': float(f.get('montant_rembourse', 0)),
+                    'statut': f.get('statut', 'en_attente'),
+                    'details': f.get('details', []),
+                    'created_at': str(f.get('created_at')) if f.get('created_at') else None,
+                    'date_remboursement': str(f.get('date_remboursement')) if f.get('date_remboursement') else None,
+                    'updated_at': str(f.get('updated_at')) if f.get('updated_at') else None
+                })
+            else:
+                # Format tuple
+                result.append({
+                    'id': f[0],
+                    'mois_reference': f[2] if len(f) > 2 else None,
+                    'assurance': f[3] if len(f) > 3 else '',
+                    'type_assurance': f[8] if len(f) > 8 else 'principale',
+                    'type_label': 'Complémentaire' if (len(f) > 8 and f[8] == 'complementaire') else 'Principale',
+                    'montant_total': float(f[4]) if len(f) > 4 and f[4] else 0,
+                    'montant_rembourse': float(f[5]) if len(f) > 5 and f[5] else 0,
+                    'statut': f[6] if len(f) > 6 else 'en_attente',
+                    'details': f[7] if len(f) > 7 else [],
+                    'created_at': str(f[9]) if len(f) > 9 and f[9] else None,
+                    'date_remboursement': str(f[10]) if len(f) > 10 and f[10] else None,
+                    'updated_at': str(f[11]) if len(f) > 11 and f[11] else None
+                })
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        print(f"❌ Erreur: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify([]), 500
+
 @app.route('/api/assurances/factures/<int:facture_id>/payer', methods=['POST'])
 @login_required
 def payer_facture_assurance(facture_id):
@@ -5135,6 +5511,43 @@ def consultation():
         return redirect(url_for('dashboard'))
     
     return render_template('consultation.html')
+
+@app.route('/api/assurances/stats')
+@login_required
+def api_assurances_stats():
+    """Récupérer les statistiques des assurances"""
+    try:
+        structure_id = session.get('structure_id')
+        
+        # Total prise en charge assurance principale
+        principale = db.execute_query("""
+            SELECT COALESCE(SUM(prise_en_charge), 0) as total
+            FROM ventes 
+            WHERE structure_id = %s 
+            AND (statut IS NULL OR statut != 'annulee')
+            AND prise_en_charge > 0
+        """, (structure_id,))
+        
+        # Total prise en charge assurance complementaire
+        complementaire = db.execute_query("""
+            SELECT COALESCE(SUM(prise_en_charge2), 0) as total
+            FROM ventes 
+            WHERE structure_id = %s 
+            AND (statut IS NULL OR statut != 'annulee')
+            AND prise_en_charge2 > 0
+        """, (structure_id,))
+        
+        total_principale = principale[0]['total'] if principale else 0
+        total_complementaire = complementaire[0]['total'] if complementaire else 0
+        
+        return jsonify({
+            'total_prise_en_charge': total_principale,
+            'total_prise_en_charge2': total_complementaire
+        })
+        
+    except Exception as e:
+        print(f"❌ Erreur: {e}")
+        return jsonify({'total_prise_en_charge': 0, 'total_prise_en_charge2': 0}), 500
 
 if __name__ == '__main__':
     # Récupère le port depuis la variable d'environnement ou utilise 5000 par défaut
