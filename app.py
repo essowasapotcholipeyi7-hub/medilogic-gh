@@ -5263,7 +5263,7 @@ def api_recettes_source():
         return jsonify([]), 500
 
 # ============================================
-# ROUTES PROFORMA
+# ROUTES PROFORMA AVEC DOUBLE ASSURANCE
 # ============================================
 
 @app.route('/proformas')
@@ -5272,7 +5272,7 @@ def proformas():
     """Liste des proformas de la structure"""
     structure_id = session.get('structure_id')
     
-    # Récupérer toutes les proformas
+    # Récupérer toutes les proformas avec les données d'assurance
     proformas = db.execute_query("""
         SELECT 
             p.*,
@@ -5303,7 +5303,7 @@ def proformas():
     
     stats = stats[0] if stats else {'total': 0, 'en_attente': 0, 'acceptees': 0, 'converties': 0, 'total_montant': 0}
     
-    # 🔥 AJOUTER : Récupérer les actes et produits depuis Google Sheets
+    # Récupérer les actes et produits depuis Google Sheets
     actes = sheets_helper.get_all_records('actes')
     produits = sheets_helper.get_all_records('produits')
     
@@ -5314,13 +5314,14 @@ def proformas():
     return render_template('proformas/proformas.html', 
                          proformas=proformas,
                          stats=stats,
-                         actes=actes_filtres,    # 🔥 PASSER LES ACTES
-                         produits=produits_filtres)  # 🔥 PASSER LES PRODUITS
+                         actes=actes_filtres,
+                         produits=produits_filtres)
+
 
 @app.route('/api/proformas', methods=['POST'])
 @login_required
 def api_creer_proforma():
-    """Créer une nouvelle proforma"""
+    """Créer une nouvelle proforma avec double assurance"""
     try:
         data = request.json
         structure_id = session.get('structure_id')
@@ -5330,6 +5331,10 @@ def api_creer_proforma():
         print("📄 CRÉATION PROFORMA")
         print(f"Patient: {data.get('patient_nom')}")
         print(f"Articles: {len(data.get('articles', []))}")
+        print(f"Assurance principale: {data.get('assurance_nom')} ({data.get('taux_assurance')}%)")
+        print(f"Assurance complémentaire: {data.get('assurance2_nom')} ({data.get('taux_assurance2')}%) - Active: {data.get('assurance2_active', False)}")
+        if data.get('taux_modifie', False):
+            print(f"   ⚠️ Taux modifié: {data.get('taux_assurance2')}% (original: {data.get('taux_original')}%)")
         print("=" * 60)
         
         # Calculer les totaux
@@ -5341,13 +5346,31 @@ def api_creer_proforma():
             article['total'] = qte * prix
             sous_total += article['total']
         
+        # 🔥 ASSURANCE PRINCIPALE
         taux_assurance = float(data.get('taux_assurance', 0))
         prise_en_charge = sous_total * (taux_assurance / 100)
-        net_a_payer = sous_total - prise_en_charge
+        reste_apres_principal = sous_total - prise_en_charge
+        
+        # 🔥 ASSURANCE COMPLÉMENTAIRE
+        assurance2_active = data.get('assurance2_active', False)
+        assurance2_nom = data.get('assurance2_nom', '')
+        taux_assurance2 = float(data.get('taux_assurance2', 0)) if assurance2_active else 0
+        prise_en_charge2 = 0
+        
+        if assurance2_active and taux_assurance2 > 0 and reste_apres_principal > 0:
+            prise_en_charge2 = reste_apres_principal * (taux_assurance2 / 100)
+        
+        # 🔥 TAUX MODIFIÉ
+        taux_modifie = data.get('taux_modifie', False)
+        taux_original = float(data.get('taux_original', 0))
+        
+        net_a_payer = sous_total - prise_en_charge - prise_en_charge2
+        if net_a_payer < 0:
+            net_a_payer = 0
         
         expires_at = datetime.now() + timedelta(days=7)
         
-        # 🔥 Récupérer le prochain numéro pour cette structure
+        # Récupérer le prochain numéro pour cette structure
         next_numero = db.execute_query("""
             SELECT COALESCE(MAX(numero_proforma), 0) + 1 as next_num
             FROM proformas 
@@ -5357,7 +5380,24 @@ def api_creer_proforma():
         prochain_numero = next_numero[0]['next_num'] if next_numero else 1
         print(f"   Numéro proforma pour structure {structure_id}: {prochain_numero}")
         
-        # Insérer la proforma avec le numéro
+        # 🔥 CONSTRUIRE L'OBJET ASSURANCES POUR LE JSONB
+        assurances_data = {
+            'principale': {
+                'nom': data.get('assurance_nom', 'Non assuré'),
+                'taux': taux_assurance,
+                'montant_prise_en_charge': prise_en_charge
+            },
+            'complementaire': {
+                'nom': assurance2_nom if assurance2_active else '',
+                'taux': taux_assurance2 if assurance2_active else 0,
+                'montant_prise_en_charge': prise_en_charge2 if assurance2_active else 0,
+                'active': assurance2_active,
+                'taux_modifie': taux_modifie,
+                'taux_original': taux_original
+            } if assurance2_active and assurance2_nom else None
+        }
+        
+        # Insérer la proforma avec les données d'assurance
         result = db.execute_query("""
             INSERT INTO proformas (
                 structure_id, 
@@ -5367,17 +5407,25 @@ def api_creer_proforma():
                 assurance_nom,
                 taux_assurance,
                 numero_assure,
+                assurance2_nom,
+                taux_assurance2,
+                numero_assure2,
+                assurance2_active,
+                taux_modifie,
+                taux_original,
                 type, 
                 articles, 
                 sous_total, 
                 prise_en_charge, 
+                prise_en_charge2,
                 net_a_payer, 
                 notes,
                 created_by,
                 expires_at,
-                numero_proforma
+                numero_proforma,
+                assurances_data
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)
             RETURNING id
         """, (
             structure_id,
@@ -5385,23 +5433,34 @@ def api_creer_proforma():
             data.get('patient_nom'),
             data.get('patient_telephone', ''),
             data.get('assurance_nom', 'Non assuré'),
-            float(data.get('taux_assurance', 0)),
+            taux_assurance,
             data.get('numero_assure', ''),
+            assurance2_nom if assurance2_active else '',
+            taux_assurance2 if assurance2_active else 0,
+            data.get('numero_assure2', ''),
+            assurance2_active,
+            taux_modifie,
+            taux_original,
             data.get('type', 'mixte'),
             json.dumps(articles, ensure_ascii=False),
             sous_total,
             prise_en_charge,
+            prise_en_charge2,
             net_a_payer,
             data.get('notes', ''),
             user_name,
             expires_at,
-            prochain_numero
+            prochain_numero,
+            json.dumps(assurances_data, ensure_ascii=False)
         ))
         
         proforma_id = result[0]['id']
         
         print(f"✅ Proforma #{proforma_id} créée (Numéro: {prochain_numero})")
         print(f"   Sous-total: {sous_total} FCFA")
+        print(f"   Prise en charge: {prise_en_charge} FCFA")
+        if assurance2_active and prise_en_charge2 > 0:
+            print(f"   Prise en charge {assurance2_nom}: {prise_en_charge2} FCFA")
         print(f"   Net à payer: {net_a_payer} FCFA")
         
         return jsonify({
@@ -5410,7 +5469,12 @@ def api_creer_proforma():
             'numero': prochain_numero,
             'net_a_payer': net_a_payer,
             'sous_total': sous_total,
-            'prise_en_charge': prise_en_charge
+            'prise_en_charge': prise_en_charge,
+            'prise_en_charge2': prise_en_charge2,
+            'assurance2_nom': assurance2_nom if assurance2_active else '',
+            'taux_assurance2': taux_assurance2 if assurance2_active else 0,
+            'taux_modifie': taux_modifie,
+            'taux_original': taux_original
         })
         
     except Exception as e:
@@ -5418,6 +5482,7 @@ def api_creer_proforma():
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
+
 
 @app.route('/api/proformas/<int:proforma_id>/statut', methods=['PUT'])
 @login_required
@@ -5450,10 +5515,10 @@ def api_changer_statut_proforma(proforma_id):
 @app.route('/proforma/<int:proforma_id>/print')
 @login_required
 def proforma_print(proforma_id):
-    """Imprimer une proforma"""
+    """Imprimer une proforma avec double assurance"""
     structure_id = session.get('structure_id')
     
-    # Récupérer la proforma
+    # Récupérer la proforma avec toutes les données
     proforma = db.execute_query("""
         SELECT * FROM proformas 
         WHERE id = %s AND structure_id = %s
@@ -5472,10 +5537,42 @@ def proforma_print(proforma_id):
     # Récupérer le logo
     logo_url = structure_info.get('logo_url', '')
     
+    # 🔥 Récupérer les données d'assurance
+    assurances_data = proforma.get('assurances_data', {})
+    if isinstance(assurances_data, str):
+        try:
+            assurances_data = json.loads(assurances_data)
+        except:
+            assurances_data = {}
+    
+    assurance2_nom = proforma.get('assurance2_nom', '')
+    taux_assurance2 = float(proforma.get('taux_assurance2', 0))
+    assurance2_active = proforma.get('assurance2_active', False)
+    taux_modifie = proforma.get('taux_modifie', False)
+    taux_original = float(proforma.get('taux_original', 0))
+    prise_en_charge2 = float(proforma.get('prise_en_charge2', 0))
+    
+    print(f"📄 Impression proforma #{proforma_id}")
+    print(f"   Assurance2 active: {assurance2_active}")
+    print(f"   Assurance2 nom: {assurance2_nom}")
+    print(f"   Taux assurance2: {taux_assurance2}%")
+    if taux_modifie:
+        print(f"   ⚠️ Taux modifié: {taux_assurance2}% (original: {taux_original}%)")
+    
     return render_template('proformas/proforma_print.html', 
                          proforma=proforma,
                          structure=structure_info,
-                         logo_url=logo_url)
+                         logo_url=logo_url,
+                         # 🔥 DONNÉES ASSURANCE COMPLÉMENTAIRE
+                         assurance2_nom=assurance2_nom,
+                         taux_assurance2=taux_assurance2,
+                         prise_en_charge2=prise_en_charge2,
+                         assurance2_active=assurance2_active,
+                         taux_modifie=taux_modifie,
+                         taux_original=taux_original,
+                         assurances_data=assurances_data)
+
+
 @app.route('/api/proformas/count')
 @login_required
 def api_proformas_count():
@@ -5501,6 +5598,7 @@ def api_proformas_count():
     except Exception as e:
         print(f"❌ Erreur: {e}")
         return jsonify({'total': 0, 'en_attente': 0})
+
 @app.route('/consultation')
 @login_required
 def consultation():

@@ -133,7 +133,7 @@
             width: 16px;
         }
         
-        /* ===== PATIENT INFO ===== */
+        /* ===== PATIENT INFO AVEC DOUBLE ASSURANCE ===== */
         .patient-info {
             display: flex;
             justify-content: space-between;
@@ -142,7 +142,7 @@
             padding: 10px 15px;
             margin-bottom: 15px;
             flex-wrap: wrap;
-            gap: 5px;
+            gap: 10px;
         }
         
         .patient-info .label {
@@ -167,6 +167,38 @@
             font-size: 11px;
             font-weight: 600;
             display: inline-block;
+        }
+        
+        .patient-info .assurance-badge-complementaire {
+            background: #17a2b8;
+            color: white;
+            padding: 3px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            display: inline-block;
+        }
+        
+        .patient-info .assurance-badge-modifie {
+            background: #856404;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 20px;
+            font-size: 9px;
+            font-weight: 600;
+            display: inline-block;
+            margin-left: 5px;
+        }
+        
+        .patient-info .taux-modifie-info {
+            color: #856404;
+            font-size: 10px;
+            font-weight: 500;
+            background: #fff3cd;
+            padding: 1px 6px;
+            border-radius: 3px;
+            display: inline-block;
+            margin-left: 5px;
         }
         
         /* ===== TABLEAU ===== */
@@ -207,7 +239,7 @@
             background: #f8f9fa;
         }
         
-        /* ===== TOTAUX ===== */
+        /* ===== TOTAUX AVEC DOUBLE ASSURANCE ===== */
         .totaux {
             display: flex;
             justify-content: flex-end;
@@ -217,7 +249,7 @@
         }
         
         .totaux .totaux-box {
-            width: 280px;
+            width: 300px;
         }
         
         .totaux .ligne {
@@ -227,13 +259,31 @@
             font-size: 13px;
         }
         
+        .totaux .ligne.principale {
+            color: #28a745;
+        }
+        
+        .totaux .ligne.complementaire {
+            color: #17a2b8;
+        }
+        
+        .totaux .ligne.complementaire-modifie {
+            color: #856404;
+        }
+        
         .totaux .ligne.total {
             font-size: 18px;
             font-weight: 800;
-            color: #28a745;
-            border-top: 2px solid #28a745;
+            color: #dc3545;
+            border-top: 2px solid #dc3545;
             padding-top: 8px;
             margin-top: 4px;
+        }
+        
+        .totaux .ligne .taux-original {
+            font-size: 10px;
+            color: #6c757d;
+            font-weight: 400;
         }
         
         /* ===== FOOTER ===== */
@@ -316,6 +366,17 @@
             background: #fff3cd;
             border-radius: 6px;
             font-size: 12px;
+        }
+        
+        /* ===== BADGE MODIFIE ===== */
+        .badge-modifie {
+            background: #fff3cd;
+            color: #856404;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: bold;
+            display: inline-block;
         }
         
         /* ===== PRINT ===== */
@@ -422,7 +483,7 @@
             </div>
         </div>
         
-        <!-- ===== PATIENT INFO ===== -->
+        <!-- ===== PATIENT INFO AVEC DOUBLE ASSURANCE ===== -->
         <div class="patient-info">
             <div>
                 <div class="label">Patient</div>
@@ -430,7 +491,7 @@
                 <div style="font-size:12px; color:#6c757d;">Tél : {{ proforma.patient_telephone or 'Non renseigné' }}</div>
             </div>
             <div>
-                <div class="label">Assurance</div>
+                <div class="label">Assurance principale</div>
                 <div class="value">
                     {% if proforma.assurance_nom and proforma.assurance_nom != 'Non assuré' %}
                     <span class="assurance-badge">{{ proforma.assurance_nom }}</span>
@@ -440,6 +501,25 @@
                     </div>
                     {% else %}
                     <span class="assurance-badge" style="background:#dc3545;">Non assuré</span>
+                    {% endif %}
+                </div>
+            </div>
+            <!-- 🔥 ASSURANCE COMPLÉMENTAIRE -->
+            <div>
+                <div class="label">Assurance complémentaire</div>
+                <div class="value">
+                    {% if assurance2_active and assurance2_nom and assurance2_nom != '' and assurance2_nom != 'Aucune' %}
+                    <span class="assurance-badge-complementaire">{{ assurance2_nom }}</span>
+                    <div style="font-size:12px; color:#6c757d; margin-top:3px;">
+                        Taux : {{ taux_assurance2|default(0) }}%
+                        {% if taux_modifie %}
+                        <span class="badge-modifie">
+                            ⚠️ Taux exceptionnel (habituel: {{ taux_original|default(0) }}%)
+                        </span>
+                        {% endif %}
+                    </div>
+                    {% else %}
+                    <span style="color: #6c757d; font-size: 12px;">Aucune</span>
                     {% endif %}
                 </div>
             </div>
@@ -475,17 +555,44 @@
             </tbody>
         </table>
         
-        <!-- ===== TOTAUX ===== -->
+        <!-- ===== TOTAUX AVEC DOUBLE ASSURANCE ===== -->
         <div class="totaux">
             <div class="totaux-box">
                 <div class="ligne">
                     <span>Sous-total</span>
                     <span>{{ proforma.sous_total|round(0)|int }} FCFA</span>
                 </div>
-                <div class="ligne">
+                
+                <!-- 🔥 PRISE EN CHARGE PRINCIPALE -->
+                <div class="ligne principale">
                     <span>Prise en charge ({{ proforma.taux_assurance }}%)</span>
-                    <span style="color:#dc3545;">- {{ proforma.prise_en_charge|round(0)|int }} FCFA</span>
+                    <span>- {{ proforma.prise_en_charge|round(0)|int }} FCFA</span>
                 </div>
+                
+                <!-- 🔥 PRISE EN CHARGE COMPLÉMENTAIRE -->
+                {% if assurance2_active and assurance2_nom and assurance2_nom != '' and assurance2_nom != 'Aucune' and prise_en_charge2 and prise_en_charge2 > 0 %}
+                <div class="ligne {% if taux_modifie %}complementaire-modifie{% else %}complementaire{% endif %}">
+                    <span>
+                        Prise en charge {{ assurance2_nom }} ({{ taux_assurance2|default(0) }}%)
+                        {% if taux_modifie %}
+                        <span class="badge-modifie" style="font-size:9px;">
+                            ⚠️ exceptionnel
+                        </span>
+                        {% endif %}
+                    </span>
+                    <span>- {{ prise_en_charge2|round(0)|int }} FCFA</span>
+                </div>
+                
+                <!-- 🔥 AFFICHER LE TAUX ORIGINAL SI MODIFIÉ -->
+                {% if taux_modifie and taux_original and taux_original > 0 %}
+                <div class="ligne" style="font-size:10px; color:#6c757d; padding-left:20px;">
+                    <span><i class="fas fa-arrow-right"></i> Taux habituel:</span>
+                    <span>{{ taux_original }}%</span>
+                </div>
+                {% endif %}
+                {% endif %}
+                
+                <!-- 🔥 NET À PAYER -->
                 <div class="ligne total">
                     <span>Net à payer</span>
                     <span>{{ proforma.net_a_payer|round(0)|int }} FCFA</span>
@@ -504,6 +611,9 @@
         <div class="conditions">
             <strong>NB :</strong> Le montant net à payer peut varier en fonction des prestations réellement effectuées.
             Cette proforma est valable 7 jours.
+            {% if assurance2_active and assurance2_nom and taux_modifie %}
+            <br><strong>⚠️ Taux exceptionnel :</strong> Le taux de l'assurance complémentaire a été modifié pour cette proforma.
+            {% endif %}
         </div>
         
         <!-- ===== FOOTER AVEC SIGNATURE ===== -->
