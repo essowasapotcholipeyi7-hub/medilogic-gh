@@ -80,7 +80,6 @@
 </div>
 
 <script>
-
 function checkFormValidity() {
     const password = document.getElementById('password').value;
     const confirm = document.getElementById('confirm_password').value;
@@ -88,26 +87,28 @@ function checkFormValidity() {
     
     if (!submitBtn) return;
     
-    let rules = {
-        length: password.length >= 8,
-        upper: /[A-Z]/.test(password),
-        lower: /[a-z]/.test(password),
-        digit: /[0-9]/.test(password),
-        symbol: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)
-    };
-    
-    const passwordValid = rules.length && rules.upper && rules.lower && rules.digit && rules.symbol;
+    // Vérifications simples
+    const passwordValid = password.length >= 8;
     const passwordMatch = password === confirm && password !== '';
     
     submitBtn.disabled = !(passwordValid && passwordMatch);
     submitBtn.style.opacity = submitBtn.disabled ? '0.6' : '1';
     submitBtn.style.cursor = submitBtn.disabled ? 'not-allowed' : 'pointer';
 }
+
 function checkPasswordStrength() {
     const password = document.getElementById('password').value;
     const strengthDiv = document.getElementById('password-strength');
     
-    let rules = {
+    if (!strengthDiv) return;
+    
+    if (password === '') {
+        strengthDiv.innerHTML = '';
+        checkFormValidity();
+        return;
+    }
+    
+    const rules = {
         length: password.length >= 8,
         upper: /[A-Z]/.test(password),
         lower: /[a-z]/.test(password),
@@ -117,27 +118,27 @@ function checkPasswordStrength() {
     
     const allValid = rules.length && rules.upper && rules.lower && rules.digit && rules.symbol;
     
-    if (password === '') {
-        strengthDiv.innerHTML = '';
-    } else if (allValid) {
+    if (allValid) {
         strengthDiv.innerHTML = '<span style="color: green;">✅ Mot de passe fort !</span>';
     } else {
-        let missing = [];
+        const missing = [];
         if (!rules.length) missing.push('8 caractères');
         if (!rules.upper) missing.push('majuscule');
         if (!rules.lower) missing.push('minuscule');
         if (!rules.digit) missing.push('chiffre');
         if (!rules.symbol) missing.push('symbole');
-        
         strengthDiv.innerHTML = '<span style="color: orange;">⚠️ Manque : ' + missing.join(', ') + '</span>';
     }
     
-    checkFormValidity(); // ← Déplace-la ici (toujours appelée)
+    checkFormValidity();
 }
+
 function checkPasswordMatch() {
     const password = document.getElementById('password').value;
     const confirm = document.getElementById('confirm_password').value;
     const matchDiv = document.getElementById('password-match');
+    
+    if (!matchDiv) return;
     
     if (confirm === '') {
         matchDiv.innerHTML = '';
@@ -150,10 +151,19 @@ function checkPasswordMatch() {
     checkFormValidity();
 }
 
-// Initialisation au chargement
+// Initialisation
 document.addEventListener('DOMContentLoaded', function() {
     checkFormValidity();
+    
+    // Écouter les changements
+    document.getElementById('password').addEventListener('input', function() {
+        checkPasswordStrength();
+        checkPasswordMatch();
+    });
+    
+    document.getElementById('confirm_password').addEventListener('input', function() {
+        checkPasswordMatch();
+    });
 });
-}
 </script>
 {% endblock %}

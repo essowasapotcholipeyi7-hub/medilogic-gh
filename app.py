@@ -363,13 +363,28 @@ def register():
         
         structures = sheets_helper.get_all_records('structures', use_prefix=False)
         
-        # Trouver le prochain ID
+        # ============================================
+        # 🔥 TROUVER LE PROCHAIN ID - CORRIGÉ
+        # ============================================
         new_id = 1
         for s in structures:
-            if s.get('ID', 0) >= new_id:
-                new_id = s.get('ID') + 1
+            # Récupérer l'ID
+            sid = s.get('ID', 0)
+            
+            # 🔥 Convertir en int si c'est une chaîne
+            if isinstance(sid, str):
+                try:
+                    sid = int(sid)
+                except ValueError:
+                    sid = 0
+            
+            # 🔥 Comparer et incrémenter
+            if sid >= new_id:
+                new_id = sid + 1
         
-        # Créer la structure
+        # ============================================
+        # CRÉER LA STRUCTURE
+        # ============================================
         new_structure = [
             new_id,
             structure_name,
@@ -387,7 +402,7 @@ def register():
         sheets_helper.add_record('structures', new_structure, use_prefix=False)
         sheets_helper.init_structure_sheets(new_id)
         
-        # 🔥 ENVOYER L'EMAIL EN ARRIÈRE-PLAN 🔥
+        # 🔥 ENVOYER L'EMAIL EN ARRIÈRE-PLAN
         envoyer_email_async(structure_name, email, new_id, proprietaire_nom)
         
         flash(f'Structure "{structure_name}" créée avec succès ! En attente d\'activation.', 'success')

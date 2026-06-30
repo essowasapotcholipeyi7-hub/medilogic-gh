@@ -110,7 +110,7 @@ class SheetsHelper:
         else:
             self._cache.clear()
     
-    # 🔥 AJOUT OPTIMISÉ
+    # 🔥 AJOUT OPTIMISÉ (CORRIGÉ)
     def add_record(self, base_name, data, use_prefix=True):
         """Ajoute un enregistrement et vide le cache"""
         try:
@@ -118,20 +118,45 @@ class SheetsHelper:
             
             try:
                 worksheet = self.spreadsheet.worksheet(sheet_name)
-            except:
+                
+                # 🔥 Récupérer les en-têtes
+                headers = worksheet.row_values(1)
+                
+                # 🔥 Ajuster les données au nombre de colonnes
+                while len(data) < len(headers):
+                    data.append('')
+                if len(data) > len(headers):
+                    data = data[:len(headers)]
+                
+                # 🔥 Trouver la première ligne vide dans la colonne A
+                col_a_values = worksheet.col_values(1)
+                next_row = len(col_a_values) + 1
+                
+                # Parcourir pour trouver la première ligne vide après l'en-tête
+                for i in range(1, len(col_a_values)):
+                    if col_a_values[i] == '':
+                        next_row = i + 1
+                        break
+                
+                # 🔥 Insérer à la ligne trouvée (et non append)
+                worksheet.insert_row(data, next_row)
+                
+            except Exception as e:
+                # La feuille n'existe pas, la créer
+                print(f"⚠️ Feuille {sheet_name} non trouvée, création...")
                 headers = [f"col_{i}" for i in range(len(data))]
                 worksheet = self.spreadsheet.add_worksheet(title=sheet_name, rows=1000, cols=20)
                 worksheet.append_row(headers)
-            
-            worksheet.append_row(data)
+                worksheet.append_row(data)
             
             # 🔥 Vider le cache pour cette feuille
             self.clear_cache(sheet_name)
             return True
         except Exception as e:
             print(f"❌ Erreur ajout à {sheet_name}: {e}")
-            return False
-    
+            import traceback
+            traceback.print_exc()
+            return False    
     # 🔥 MISE À JOUR OPTIMISÉE
     def update_record(self, base_name, row_num, data, use_prefix=True):
         """Met à jour un enregistrement et vide le cache"""
