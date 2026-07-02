@@ -1,4 +1,3 @@
-<!-- templates/factures/factures.html -->
 {% extends "base.html" %}
 
 {% block title %}Factures{% endblock %}
@@ -116,8 +115,39 @@
     </div>
 </div>
 
+<!-- 🔥 Modal Choix Format Impression -->
+<div class="modal fade" id="printFormatModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="fas fa-print"></i> Choisir le format</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-grid gap-3">
+                    <button class="btn btn-outline-secondary btn-lg p-3" onclick="imprimerDocument('80mm')">
+                        <i class="fas fa-receipt fa-2x d-block mb-2"></i>
+                        <strong>Format Ticket</strong><br>
+                        <small class="text-muted">80mm - Noir & Blanc</small>
+                    </button>
+                    <button class="btn btn-outline-primary btn-lg p-3" onclick="imprimerDocument('A4')">
+                        <i class="fas fa-file-pdf fa-2x d-block mb-2"></i>
+                        <strong>Format A4</strong><br>
+                        <small class="text-muted">Standard - Couleur</small>
+                    </button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 let facturesData = [];
+let documentAImprimer = null;
+let typeDocumentAImprimer = null; // 'facture' ou 'recu_paiement'
 
 // ========== CHARGER LES FACTURES ==========
 function chargerFactures(statut = 'toutes') {
@@ -177,7 +207,7 @@ function afficherFactures(factures) {
                         <i class="fas fa-money-bill-wave"></i>
                     </button>
                     ` : ''}
-                    <button class="btn btn-secondary" onclick="imprimerRecu(${f.id})" title="Imprimer">
+                    <button class="btn btn-secondary" onclick="ouvrirChoixFormat(${f.id}, 'facture')" title="Imprimer">
                         <i class="fas fa-print"></i>
                     </button>
                 </div>
@@ -250,21 +280,16 @@ function confirmerPaiement() {
         if (data.success) {
             alert(`✅ Paiement enregistré !\nMontant: ${montant.toLocaleString()} FCFA\nReste à payer: ${data.reste_a_payer.toLocaleString()} FCFA`);
             
-            // Fermer le modal
             bootstrap.Modal.getInstance(document.getElementById('paiementModal')).hide();
-            
-            // Rafraîchir la liste
             chargerFactures('toutes');
             
-            // Si la facture est payée, proposer d'imprimer le reçu
             if (data.statut === 'payee') {
                 if (confirm('La facture est entièrement payée. Voulez-vous imprimer le reçu ?')) {
-                    imprimerRecu(factureId);
+                    ouvrirChoixFormat(factureId, 'facture');
                 }
             } else {
-                // Proposer d'imprimer le reçu de paiement partiel
                 if (confirm('Voulez-vous imprimer le reçu de paiement ?')) {
-                    window.open(`/facture/recu_paiement/${data.paiement_id}?format=80mm`, '_blank');
+                    ouvrirChoixFormatRecu(data.paiement_id);
                 }
             }
         } else {
@@ -276,9 +301,46 @@ function confirmerPaiement() {
     });
 }
 
-// ========== IMPRIMER REÇU ==========
+// ========== CHOIX FORMAT POUR FACTURE ==========
+function ouvrirChoixFormat(documentId, type) {
+    documentAImprimer = documentId;
+    typeDocumentAImprimer = type || 'facture';
+    new bootstrap.Modal(document.getElementById('printFormatModal')).show();
+}
+
+// ========== CHOIX FORMAT POUR REÇU DE PAIEMENT ==========
+function ouvrirChoixFormatRecu(paiementId) {
+    documentAImprimer = paiementId;
+    typeDocumentAImprimer = 'recu_paiement';
+    new bootstrap.Modal(document.getElementById('printFormatModal')).show();
+}
+
+// ========== IMPRIMER LE DOCUMENT ==========
+function imprimerDocument(format) {
+    if (!documentAImprimer) {
+        alert('Aucun document à imprimer');
+        return;
+    }
+    
+    bootstrap.Modal.getInstance(document.getElementById('printFormatModal')).hide();
+    
+    let url = '';
+    if (typeDocumentAImprimer === 'facture') {
+        url = `/facture/print/${documentAImprimer}?format=${format}`;
+    } else if (typeDocumentAImprimer === 'recu_paiement') {
+        url = `/facture/recu_paiement/${documentAImprimer}?format=${format}`;
+    }
+    
+    window.open(url, '_blank');
+    
+    // Réinitialiser
+    documentAImprimer = null;
+    typeDocumentAImprimer = null;
+}
+
+// ========== IMPRIMER REÇU (ancienne méthode, conservée pour compatibilité) ==========
 function imprimerRecu(factureId) {
-    window.open(`/facture/print/${factureId}?format=80mm`, '_blank');
+    ouvrirChoixFormat(factureId, 'facture');
 }
 
 // ========== RAFRAÎCHIR ==========
@@ -291,4 +353,4 @@ document.addEventListener('DOMContentLoaded', function() {
     chargerFactures('toutes');
 });
 </script>
-{% endblock %} 
+{% endblock %}
