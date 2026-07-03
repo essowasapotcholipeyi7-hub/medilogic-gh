@@ -7249,6 +7249,1008 @@ def lunetterie_vente():
     return render_template('lunetterie_vente.html', 
                          lunettes=lunettes_filtrees,
                          patient_taux=patient_taux)
+# ============================================
+# ROUTES LUNETTERIE
+# ============================================
+
+@app.route('/api/lunettes')
+@login_required
+def api_get_lunettes():
+    """Récupérer toutes les lunettes depuis Google Sheets avec prise en charge"""
+    try:
+        structure_id = session.get('structure_id')
+        
+        print(f"📂 Lecture des lunettes pour structure {structure_id}")
+        
+        # 🔥 Utiliser la nouvelle méthode
+        lunettes = sheets_helper.get_all_lunettes()
+        
+        # Filtrer par structure
+        result = []
+        for l in lunettes:
+            if str(l.get('structure_id')) == str(structure_id):
+                result.append({
+                    'id': l.get('ID'),
+                    'code': l.get('code', ''),
+                    'nom': l.get('nom', ''),
+                    'categorie': l.get('categorie', ''),
+                    'marque': l.get('marque', ''),
+                    'modele': l.get('modele', ''),
+                    'type_verres': l.get('type_verres', ''),
+                    'couleur': l.get('couleur', ''),
+                    'prix_achat': l.get('prix_achat', 0),
+                    'prix_vente': l.get('prix_vente', 0),
+                    'prix_avec_remise': l.get('prix_avec_remise', 0),
+                    'remise': l.get('remise', 0),
+                    'quantite_stock': l.get('quantite_stock', 0),
+                    'seuil_alerte': l.get('seuil_alerte', 5),
+                    'fournisseur': l.get('fournisseur', ''),
+                    'description': l.get('description', ''),
+                    # 🔥 PRISE EN CHARGE
+                    'prise_en_charge_amu': l.get('prise_en_charge_amu', True),
+                    'commentaire_amu': l.get('commentaire_amu', ''),
+                    'prise_en_charge_cac': l.get('prise_en_charge_cac', True),
+                    'commentaire_cac': l.get('commentaire_cac', '')
+                })
+        
+        print(f"✅ {len(result)} lunettes retournées")
+        return jsonify(result)
+        
+    except Exception as e:
+        print(f"❌ Erreur: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify([]), 500
+
+@app.route('/api/lunettes/<int:lunette_id>/approvisionner', methods=['POST'])
+@login_required
+def api_approvisionner_lunette(lunette_id):
+    """Approvisionner une lunette (ajouter au stock)"""
+    try:
+        data = request.json
+        structure_id = session.get('structure_id')
+        quantite = int(data.get('quantite', 0))
+        
+        print(f"📦 Approvisionnement lunette ID: {lunette_id}")
+        print(f"   Quantité: {quantite}")
+        
+        if not quantite or quantite <= 0:
+            return jsonify({'success': False, 'error': 'Quantité invalide'}), 400
+        
+        # Lire depuis Google Sheets
+        lunettes = sheets_helper.get_all_records('lunettes')
+        
+        # Trouver la lunette
+        lunette = None
+        for l in lunettes:
+            if str(l.get('ID')) == str(lunette_id):
+                lunette = l
+                break
+        
+        if not lunette:
+            return jsonify({'success': False, 'error': 'Lunette non trouvée'}), 404
+        
+        # Mettre à jour le stock dans Sheets
+        sheet_name = f"struct_{structure_id}_lunettes"
+        worksheet = sheets_helper.spreadsheet.worksheet(sheet_name)
+        
+        # Trouver la ligne
+        cell = worksheet.find(str(lunette_id), in_column=1)
+        if cell:
+            row_num = cell.row
+            current_row = worksheet.row_values(row_num)
+            stock_actuel = int(current_row[10]) if len(current_row) > 10 else 0  # colonne K = quantite_stock
+            nouveau_stock = stock_actuel + quantite
+            
+            worksheet.update_cell(row_num, 11, nouveau_stock)  # colonne K = quantite_stock
+            
+            print(f"✅ Stock mis à jour: {stock_actuel} → {nouveau_stock}")
+            
+            # Vider le cache
+            sheets_helper.clear_cache(sheet_name)
+            
+            return jsonify({'success': True, 'stock': nouveau_stock})
+        else:
+            return jsonify({'success': False, 'error': 'Lunette non trouvée dans Sheets'}), 404
+            
+    except Exception as e:
+        print(f"❌ Erreur approvisionnement lunette: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/lunettes', methods=['POST'])
+@login_required
+def api_add_lunette():
+    """Ajouter une lunette avec prise en charge"""
+    try:
+        data = request.json
+        structure_id = session.get('structure_id')
+        
+        print(f"➕ Ajout lunette: {data.get('nom')}")
+        
+        lunettes = sheets_helper.get_all_records('lunettes')
+        
+        new_id = 1
+        for l in lunettes:
+            sid = l.get('ID', 0)
+            if isinstance(sid, str):
+                try:
+                    sid = int(sid)
+                except ValueError:
+                    sid = 0
+            if sid >= new_id:
+                new_id = sid + 1
+        
+        # 🔥 AVEC LES COLONNES DE PRISE EN CHARGE
+        new_lunette = [
+            new_id,
+            data.get('code', f"LUN-{new_id:04d}"),
+            data.get('nom', ''),
+            data.get('categorie', 'vue'),
+            data.get('marque', ''),
+            data.get('modele', ''),
+            data.get('type_verres', 'simple'),
+            data.get('couleur', ''),
+            float(data.get('prix_achat', 0)),
+            float(data.get('prix_vente', 0)),
+            float(data.get('remise', 0)),
+            int(data.get('quantite_stock', 0)),
+            int(data.get('seuil_alerte', 5)),
+            data.get('fournisseur', ''),
+            data.get('description', ''),
+            structure_id,
+            datetime.now().isoformat(),
+            'TRUE' if data.get('prise_en_charge_amu', True) else 'FALSE',
+            data.get('commentaire_amu', ''),
+            'TRUE' if data.get('prise_en_charge_cac', True) else 'FALSE',
+            data.get('commentaire_cac', '')
+        ]
+        
+        sheets_helper.add_record('lunettes', new_lunette)
+        sheets_helper.clear_cache(f"struct_{structure_id}_lunettes")
+        
+        return jsonify({'success': True, 'id': new_id})
+        
+    except Exception as e:
+        print(f"❌ Erreur: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/admin/lunettes/<int:lunette_id>', methods=['PUT'])
+@login_required
+def api_update_lunette(lunette_id):
+    """Modifier une lunette"""
+    try:
+        data = request.json
+        structure_id = session.get('structure_id')
+        
+        print(f"✏️ Modification lunette ID: {lunette_id}")
+        
+        sheet_name = f"struct_{structure_id}_lunettes"
+        worksheet = sheets_helper.spreadsheet.worksheet(sheet_name)
+        
+        # Trouver la lunette
+        cell = worksheet.find(str(lunette_id), in_column=1)
+        if not cell:
+            return jsonify({'success': False, 'error': 'Lunette non trouvée'}), 404
+        
+        row_num = cell.row
+        current_row = worksheet.row_values(row_num)
+        
+        # Mettre à jour les colonnes
+        # A=ID, B=code, C=nom, D=categorie, E=marque, F=modele, G=type_verres, H=couleur, I=prix_achat, J=prix_vente, K=quantite_stock, L=seuil_alerte, M=fournisseur, N=description, O=structure_id, P=created_at
+        current_row[1] = data.get('code', f"LUN-{lunette_id:04d}")
+        current_row[2] = data.get('nom', '')
+        current_row[3] = data.get('categorie', 'vue')
+        current_row[4] = data.get('marque', '')
+        current_row[5] = data.get('modele', '')
+        current_row[6] = data.get('type_verres', 'simple')
+        current_row[7] = data.get('couleur', '')
+        current_row[8] = str(float(data.get('prix_achat', 0)))
+        current_row[9] = str(float(data.get('prix_vente', 0)))
+        current_row[10] = str(int(data.get('quantite_stock', 0)))
+        current_row[11] = str(int(data.get('seuil_alerte', 5)))
+        current_row[12] = data.get('fournisseur', '')
+        current_row[13] = data.get('description', '')
+        current_row[14] = str(structure_id)
+        
+        worksheet.update(range_name=f'A{row_num}:P{row_num}', values=[current_row])
+        
+        # Vider le cache
+        sheets_helper.clear_cache(sheet_name)
+        
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        print(f"❌ Erreur modification lunette: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/lunettes/<int:lunette_id>', methods=['DELETE'])
+@login_required
+def api_delete_lunette(lunette_id):
+    """Supprimer une lunette"""
+    try:
+        structure_id = session.get('structure_id')
+        
+        print(f"🗑️ Suppression lunette ID: {lunette_id}")
+        
+        sheet_name = f"struct_{structure_id}_lunettes"
+        worksheet = sheets_helper.spreadsheet.worksheet(sheet_name)
+        
+        # Trouver la lunette
+        cell = worksheet.find(str(lunette_id), in_column=1)
+        if not cell:
+            return jsonify({'success': False, 'error': 'Lunette non trouvée'}), 404
+        
+        # Supprimer la ligne
+        worksheet.delete_rows(cell.row)
+        
+        # Vider le cache
+        sheets_helper.clear_cache(sheet_name)
+        
+        return jsonify({'success': True, 'message': 'Lunette supprimée'})
+        
+    except Exception as e:
+        print(f"❌ Erreur suppression lunette: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/lunettes/importer', methods=['POST'])
+@login_required
+def api_importer_lunettes():
+    """Importer des lunettes depuis un fichier Excel/CSV"""
+    try:
+        structure_id = session.get('structure_id')
+        user_name = session.get('user_name', 'System')
+        
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'error': 'Aucun fichier'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'success': False, 'error': 'Fichier vide'}), 400
+        
+        # Lire le fichier
+        import pandas as pd
+        import io
+        
+        if file.filename.endswith('.csv'):
+            df = pd.read_csv(file, encoding='utf-8')
+        else:
+            df = pd.read_excel(file)
+        
+        print(f"📊 Fichier lu: {len(df)} lignes")
+        
+        # Récupérer les lunettes existantes
+        lunettes = sheets_helper.get_all_records('lunettes')
+        
+        # Trouver le prochain ID
+        next_id = 1
+        for l in lunettes:
+            sid = l.get('ID', 0)
+            if isinstance(sid, str):
+                try:
+                    sid = int(sid)
+                except ValueError:
+                    sid = 0
+            if sid >= next_id:
+                next_id = sid + 1
+        
+        importes = 0
+        for _, row in df.iterrows():
+            # Récupérer les valeurs
+            nom = str(row.get('nom', row.get('Nom', ''))).strip()
+            if not nom:
+                continue
+            
+            new_lunette = [
+                next_id + importes,  # ID
+                str(row.get('code', row.get('Code', f"LUN-{next_id + importes:04d}"))),  # code
+                nom,  # nom
+                str(row.get('categorie', row.get('Catégorie', 'vue'))),  # categorie
+                str(row.get('marque', row.get('Marque', ''))),  # marque
+                str(row.get('modele', row.get('Modèle', ''))),  # modele
+                str(row.get('type_verres', row.get('Type verres', 'simple'))),  # type_verres
+                str(row.get('couleur', row.get('Couleur', ''))),  # couleur
+                float(row.get('prix_achat', row.get('Prix achat', 0)) or 0),  # prix_achat
+                float(row.get('prix_vente', row.get('Prix vente', 0)) or 0),  # prix_vente
+                int(row.get('quantite_stock', row.get('Stock', 0)) or 0),  # quantite_stock
+                int(row.get('seuil_alerte', row.get('Seuil', 5)) or 5),  # seuil_alerte
+                str(row.get('fournisseur', row.get('Fournisseur', ''))),  # fournisseur
+                str(row.get('description', row.get('Description', ''))),  # description
+                structure_id,  # structure_id
+                datetime.now().isoformat()  # created_at
+            ]
+            
+            sheets_helper.add_record('lunettes', new_lunette)
+            importes += 1
+        
+        # Vider le cache
+        sheets_helper.clear_cache(f"struct_{structure_id}_lunettes")
+        
+        print(f"✅ {importes} lunettes importées")
+        
+        return jsonify({'success': True, 'importes': importes})
+        
+    except Exception as e:
+        print(f"❌ Erreur importation lunettes: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+# ============================================
+# ROUTE POUR ENREGISTRER UNE VENTE DE LUNETTES
+# ============================================
+
+@app.route('/api/ventes/lunettes', methods=['POST'])
+@login_required
+def api_vente_lunettes():
+    """Enregistrer une vente de lunettes dans Neon"""
+    try:
+        structure_id = session.get('structure_id')
+        if not structure_id:
+            return jsonify({'error': 'Structure non identifiée'}), 401
+        
+        data = request.json
+        if not data:
+            return jsonify({'error': 'Données manquantes'}), 400
+        
+        produits = data.get('produits', [])
+        if not produits:
+            return jsonify({'error': 'Aucun produit dans le panier'}), 400
+        
+        patient_id = data.get('patient_id')
+        if not patient_id:
+            return jsonify({'error': 'Patient non sélectionné'}), 400
+        
+        # ============================================
+        # CONNEXION À NEON AVEC Config.DATABASE_URL
+        # ============================================
+        import psycopg2
+        from psycopg2.extras import RealDictCursor
+        
+        # 🔥 UTILISER LA CONFIGURATION
+        from config import Config
+        DATABASE_URL = Config.DATABASE_URL
+        
+        print(f"🔗 Connexion à Neon...")
+        print(f"📊 URL: {DATABASE_URL[:50]}...")  # Affiche le début de l'URL
+        
+        try:
+            conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+            cur = conn.cursor()
+            print("✅ Connecté à Neon")
+        except Exception as e:
+            print(f"❌ Erreur de connexion à Neon: {e}")
+            return jsonify({'error': f'Erreur de connexion à la base de données: {str(e)}'}), 500
+        
+        # Vérifier que le patient existe
+        cur.execute("SELECT id, nom, prenom FROM patients WHERE id = %s AND structure_id = %s", (patient_id, structure_id))
+        patient = cur.fetchone()
+        
+        if not patient:
+            cur.close()
+            conn.close()
+            return jsonify({'error': 'Patient non trouvé'}), 404
+        
+        patient_nom = f"{patient['nom']} {patient['prenom'] or ''}".strip()
+        
+        # Mettre à jour le stock dans Google Sheets
+        sheets_helper.set_structure(structure_id)
+        
+        ventes_ids = []
+        
+        for produit in produits:
+            # Calculer le prix avec remise
+            prix = float(produit.get('prix', 0))
+            remise = float(produit.get('remise', 0))
+            prix_avec_remise = prix - (prix * remise / 100)
+            quantite = int(produit.get('quantite', 1))
+            total = prix_avec_remise * quantite
+            
+            # Insérer dans Neon
+            cur.execute("""
+                INSERT INTO ventes_lunettes (
+                    patient_id, patient_nom, lunette_id, lunette_nom,
+                    marque, modele, prix, remise, prix_avec_remise,
+                    quantite, total, taux_assurance, prise_en_charge,
+                    prise_en_charge2, net_a_payer, mode_paiement,
+                    montant_donne, rendu, reste_a_payer,
+                    structure_id, created_by
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s
+                ) RETURNING id
+            """, (
+                patient_id,
+                patient_nom,
+                produit.get('id'),
+                produit.get('nom'),
+                produit.get('marque', ''),
+                produit.get('modele', ''),
+                prix,
+                remise,
+                prix_avec_remise,
+                quantite,
+                total,
+                float(data.get('taux_assurance', 0)),
+                float(data.get('prise_en_charge', 0)),
+                float(data.get('prise_en_charge2', 0)),
+                float(data.get('net_a_payer', 0)),
+                data.get('mode_paiement', 'especes'),
+                float(data.get('montant_donne', 0)),
+                float(data.get('rendu', 0)),
+                float(data.get('reste_a_payer', 0)),
+                structure_id,
+                session.get('user_name', 'System')
+            ))
+            
+            vente_id = cur.fetchone()['id']
+            ventes_ids.append(vente_id)
+            
+            # Mettre à jour le stock dans Google Sheets
+            lunette = sheets_helper.get_record_by_id('lunettes', produit.get('id'))
+            if lunette:
+                stock_actuel = int(lunette.get('quantite_stock', 0))
+                nouveau_stock = stock_actuel - quantite
+                if nouveau_stock < 0:
+                    nouveau_stock = 0
+                
+                sheets_helper.update_record_by_id('lunettes', produit.get('id'), {
+                    'quantite_stock': nouveau_stock,
+                    'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                })
+                print(f"📦 Stock mis à jour: {stock_actuel} → {nouveau_stock} pour {produit.get('nom')}")
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        print(f"✅ {len(ventes_ids)} vente(s) enregistrée(s) dans Neon")
+        
+        return jsonify({
+            'success': True,
+            'message': f'{len(ventes_ids)} vente(s) enregistrée(s) avec succès',
+            'vente_ids': ventes_ids,
+            'vente_id': ventes_ids[0] if ventes_ids else None
+        })
+        
+    except Exception as e:
+        print(f"❌ Erreur enregistrement vente: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+# ============================================
+# ROUTES POUR LES REÇUS DE LUNETTES
+# ============================================
+
+@app.route('/recu_lunette/<int:vente_id>')
+@login_required
+def recu_lunette(vente_id):
+    """Reçu client pour une vente de lunettes"""
+    from datetime import datetime
+    import json
+    
+    structure_id = session.get('structure_id')
+    
+    if not structure_id:
+        return "Structure non trouvée", 404
+    
+    # Récupérer les infos de la structure
+    structures = sheets_helper.get_all_records('structures', use_prefix=False)
+    structure_info = next((s for s in structures if str(s.get('ID')) == str(structure_id)), {})
+    
+    structure_nom = structure_info.get('nom', 'Medilogic-GHP')
+    structure_adresse = structure_info.get('adresse', '')
+    structure_telephone = structure_info.get('telephone', '')
+    structure_email = structure_info.get('email', '')
+    structure_logo = structure_info.get('logo_url', '')
+    
+    # Récupérer la vente depuis Neon
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+    from config import Config
+    
+    conn = psycopg2.connect(Config.DATABASE_URL, cursor_factory=RealDictCursor)
+    cur = conn.cursor()
+    
+    cur.execute("""
+        SELECT * FROM ventes_lunettes 
+        WHERE id = %s AND structure_id = %s
+    """, (vente_id, structure_id))
+    
+    vente = cur.fetchone()
+    cur.close()
+    conn.close()
+    
+    if not vente:
+        return f"Vente #{vente_id} non trouvée", 404
+    
+    # Préparer les articles
+    articles = [{
+        'nom': vente.get('lunette_nom', 'Lunette'),
+        'marque': vente.get('marque', ''),
+        'modele': vente.get('modele', ''),
+        'quantite': vente.get('quantite', 1),
+        'prix_unitaire': float(vente.get('prix', 0)),
+        'remise': float(vente.get('remise', 0)),
+        'prix_avec_remise': float(vente.get('prix_avec_remise', 0)),
+        'total': float(vente.get('total', 0))
+    }]
+    
+    # Format du reçu (80mm par défaut)
+    format_impression = request.args.get('format', '80mm')
+    
+    return render_template('recu_lunette.html',
+                         vente_id=vente_id,
+                         articles=articles,
+                         sous_total=float(vente.get('total', 0)),
+                         taux_assurance=float(vente.get('taux_assurance', 0)),
+                         prise_en_charge=float(vente.get('prise_en_charge', 0)),
+                         prise_en_charge2=float(vente.get('prise_en_charge2', 0)),
+                         net_a_payer=float(vente.get('net_a_payer', 0)),
+                         patient_nom=vente.get('patient_nom', 'Patient'),
+                         mode_paiement=vente.get('mode_paiement', 'Espèces'),
+                         montant_donne=float(vente.get('montant_donne', 0)),
+                         rendu=float(vente.get('rendu', 0)),
+                         reste_a_payer=float(vente.get('reste_a_payer', 0)),
+                         structure_nom=structure_nom,
+                         structure_adresse=structure_adresse,
+                         structure_telephone=structure_telephone,
+                         structure_email=structure_email,
+                         structure_logo=structure_logo,
+                         date_actuelle=datetime.now().strftime('%d/%m/%Y %H:%M'),
+                         nom_caissier=session.get('user_name', 'System'),
+                         format_impression=format_impression,
+                         marque=vente.get('marque', ''),
+                         modele=vente.get('modele', ''))
+
+
+@app.route('/recu_lunette_structure/<int:vente_id>')
+@login_required
+def recu_lunette_structure(vente_id):
+    """Reçu pour la structure (copie) pour une vente de lunettes"""
+    from datetime import datetime
+    import json
+    
+    structure_id = session.get('structure_id')
+    
+    if not structure_id:
+        return "Structure non trouvée", 404
+    
+    # Récupérer les infos de la structure
+    structures = sheets_helper.get_all_records('structures', use_prefix=False)
+    structure_info = next((s for s in structures if str(s.get('ID')) == str(structure_id)), {})
+    
+    structure_nom = structure_info.get('nom', 'Medilogic-GHP')
+    structure_adresse = structure_info.get('adresse', '')
+    structure_telephone = structure_info.get('telephone', '')
+    structure_email = structure_info.get('email', '')
+    structure_logo = structure_info.get('logo_url', '')
+    
+    # Récupérer la vente depuis Neon
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+    from config import Config
+    
+    conn = psycopg2.connect(Config.DATABASE_URL, cursor_factory=RealDictCursor)
+    cur = conn.cursor()
+    
+    cur.execute("""
+        SELECT * FROM ventes_lunettes 
+        WHERE id = %s AND structure_id = %s
+    """, (vente_id, structure_id))
+    
+    vente = cur.fetchone()
+    cur.close()
+    conn.close()
+    
+    if not vente:
+        return f"Vente #{vente_id} non trouvée", 404
+    
+    # Préparer les articles
+    articles = [{
+        'nom': vente.get('lunette_nom', 'Lunette'),
+        'marque': vente.get('marque', ''),
+        'modele': vente.get('modele', ''),
+        'quantite': vente.get('quantite', 1),
+        'prix_unitaire': float(vente.get('prix', 0)),
+        'remise': float(vente.get('remise', 0)),
+        'prix_avec_remise': float(vente.get('prix_avec_remise', 0)),
+        'total': float(vente.get('total', 0))
+    }]
+    
+    format_impression = request.args.get('format', '80mm')
+    
+    return render_template('recu_lunette_structure.html',
+                         vente_id=vente_id,
+                         articles=articles,
+                         sous_total=float(vente.get('total', 0)),
+                         taux_assurance=float(vente.get('taux_assurance', 0)),
+                         prise_en_charge=float(vente.get('prise_en_charge', 0)),
+                         prise_en_charge2=float(vente.get('prise_en_charge2', 0)),
+                         net_a_payer=float(vente.get('net_a_payer', 0)),
+                         patient_nom=vente.get('patient_nom', 'Patient'),
+                         mode_paiement=vente.get('mode_paiement', 'Espèces'),
+                         montant_donne=float(vente.get('montant_donne', 0)),
+                         rendu=float(vente.get('rendu', 0)),
+                         reste_a_payer=float(vente.get('reste_a_payer', 0)),
+                         structure_nom=structure_nom,
+                         structure_adresse=structure_adresse,
+                         structure_telephone=structure_telephone,
+                         structure_email=structure_email,
+                         structure_logo=structure_logo,
+                         date_actuelle=datetime.now().strftime('%d/%m/%Y %H:%M'),
+                         nom_caissier=session.get('user_name', 'System'),
+                         format_impression=format_impression)
+
+# ============================================
+# ROUTES PROFORMA LUNETTERIE
+# ============================================
+
+@app.route('/api/proformas/lunettes', methods=['POST'])
+@login_required
+def api_creer_proforma_lunette():
+    """Créer une proforma pour la lunetterie (sans assurance)"""
+    try:
+        data = request.json
+        structure_id = session.get('structure_id')
+        user_name = session.get('user_name', 'System')
+        
+        print("=" * 60)
+        print("👓 CRÉATION PROFORMA LUNETTERIE")
+        print(f"Patient: {data.get('patient_nom')}")
+        print(f"Articles: {len(data.get('articles', []))}")
+        print(f"Remise: {data.get('remise', 0)} FCFA")
+        print(f"RIB: {data.get('rib', 'Non renseigné')}")
+        print(f"N° Affiliation: {data.get('numero_affiliation', 'Non renseigné')}")
+        print("=" * 60)
+        
+        if not structure_id:
+            return jsonify({'success': False, 'error': 'Structure non trouvée'}), 400
+        
+        if not data.get('patient_id'):
+            return jsonify({'success': False, 'error': 'Patient non sélectionné'}), 400
+        
+        # Récupérer les articles
+        articles = data.get('articles', [])
+        if not articles:
+            return jsonify({'success': False, 'error': 'Aucun article dans le panier'}), 400
+        
+        # Calculer les totaux
+        sous_total = 0
+        tva_taux = float(data.get('tva_taux', 18))
+        remise = float(data.get('remise', 0))
+        
+        for article in articles:
+            prix = float(article.get('prix_unitaire', 0))
+            quantite = int(article.get('quantite', 1))
+            article_total = prix * quantite
+            article['total'] = article_total
+            article['montant_ht'] = article_total
+            article['tva'] = tva_taux
+            article['montant_ttc'] = article_total * (1 + tva_taux / 100)
+            sous_total += article_total
+        
+        net_a_payer = sous_total - remise
+        if net_a_payer < 0:
+            net_a_payer = 0
+        
+        # Générer le numéro de proforma
+        count_result = db.execute_query("""
+            SELECT COUNT(*) as total FROM proformas_lunettes WHERE structure_id = %s
+        """, (structure_id,))
+        
+        total = count_result[0]['total'] if count_result else 0
+        numero = f"PL-{structure_id}-{total+1:04d}"
+        
+        # 🔥 Récupérer le RIB et le numéro d'affiliation
+        rib = data.get('rib', '')
+        numero_affiliation = data.get('numero_affiliation', '')
+        
+        # 🔥 SAUVEGARDER LE RIB ET LE NUMÉRO D'AFFILIATION DANS LA STRUCTURE
+        if rib or numero_affiliation:
+            try:
+                sheet_structures = sheets_helper.spreadsheet.worksheet("structures")
+                cell = sheet_structures.find(str(structure_id), in_column=1)
+                
+                if cell:
+                    row_num = cell.row
+                    current_row = sheet_structures.row_values(row_num)
+                    
+                    while len(current_row) < 15:
+                        current_row.append('')
+                    
+                    if rib:
+                        current_row[13] = rib
+                    
+                    if numero_affiliation:
+                        current_row[14] = numero_affiliation
+                    
+                    sheet_structures.update(f'A{row_num}:O{row_num}', [current_row])
+                    print(f"✅ RIB et affiliation sauvegardés dans la structure")
+                    
+            except Exception as e:
+                print(f"⚠️ Erreur sauvegarde RIB dans structure: {e}")
+        
+        # 🔥 Gérer la date de naissance (si vide ou invalide, mettre NULL)
+        date_naissance = data.get('patient_date_naissance')
+        if date_naissance == '' or date_naissance is None:
+            date_naissance = None
+        else:
+            try:
+                # Valider le format de la date
+                datetime.strptime(date_naissance, '%Y-%m-%d')
+            except (ValueError, TypeError):
+                date_naissance = None
+        
+        # 🔥 Gérer l'âge
+        age = data.get('patient_age')
+        if age == '' or age is None:
+            age = None
+        else:
+            try:
+                age = int(age)
+            except (ValueError, TypeError):
+                age = None
+        
+        # Insérer dans Neon avec gestion des NULL
+        result = db.execute_query("""
+            INSERT INTO proformas_lunettes (
+                structure_id,
+                patient_id,
+                patient_nom,
+                patient_telephone,
+                patient_date_naissance,
+                patient_age,
+                numero,
+                articles,
+                sous_total,
+                remise,
+                type_remise,
+                valeur_remise,
+                net_a_payer,
+                tva_taux,
+                rib,
+                numero_affiliation,
+                medecin_prescripteur,
+                notes,
+                created_by
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+        """, (
+            structure_id,
+            data.get('patient_id'),
+            data.get('patient_nom', ''),
+            data.get('patient_telephone', ''),
+            date_naissance,  # 🔥 NULL si vide
+            age,  # 🔥 NULL si vide
+            numero,
+            json.dumps(articles, ensure_ascii=False),
+            sous_total,
+            remise,
+            data.get('type_remise', 'pourcentage'),
+            float(data.get('valeur_remise', 0)),
+            net_a_payer,
+            tva_taux,
+            rib,
+            numero_affiliation,
+            data.get('medecin_prescripteur', ''),
+            data.get('notes', ''),
+            user_name
+        ))
+        
+        if not result or len(result) == 0:
+            return jsonify({'success': False, 'error': 'Erreur lors de l\'insertion'}), 500
+        
+        proforma_id = result[0]['id']
+        
+        print(f"✅ Proforma lunetterie #{proforma_id} créée (Numéro: {numero})")
+        print(f"   Sous-total: {sous_total} FCFA")
+        print(f"   Remise: {remise} FCFA")
+        print(f"   Net à payer: {net_a_payer} FCFA")
+        
+        return jsonify({
+            'success': True,
+            'id': proforma_id,
+            'numero': numero,
+            'net_a_payer': net_a_payer,
+            'sous_total': sous_total
+        })
+        
+    except Exception as e:
+        print(f"❌ Erreur: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/proformas/lunettes/<int:proforma_id>', methods=['GET'])
+@login_required
+def api_get_proforma_lunette(proforma_id):
+    """Récupérer une proforma lunetterie"""
+    try:
+        structure_id = session.get('structure_id')
+        
+        proforma = db.execute_query("""
+            SELECT * FROM proformas_lunettes 
+            WHERE id = %s AND structure_id = %s
+        """, (proforma_id, structure_id))
+        
+        if not proforma:
+            return jsonify({'success': False, 'error': 'Proforma non trouvée'}), 404
+        
+        p = proforma[0]
+        
+        # Convertir les articles JSON
+        articles = p.get('articles', [])
+        if isinstance(articles, str):
+            articles = json.loads(articles)
+        
+        return jsonify({
+            'id': p.get('id'),
+            'numero': p.get('numero'),
+            'patient_nom': p.get('patient_nom'),
+            'patient_telephone': p.get('patient_telephone'),
+            'patient_date_naissance': str(p.get('patient_date_naissance')) if p.get('patient_date_naissance') else '',
+            'patient_age': p.get('patient_age'),
+            'articles': articles,
+            'sous_total': float(p.get('sous_total', 0)),
+            'remise': float(p.get('remise', 0)),
+            'net_a_payer': float(p.get('net_a_payer', 0)),
+            'tva_taux': float(p.get('tva_taux', 18)),
+            'medecin_prescripteur': p.get('medecin_prescripteur', ''),
+            'notes': p.get('notes', ''),
+            'statut': p.get('statut', 'en_attente'),
+            'created_at': str(p.get('created_at')) if p.get('created_at') else '',
+            'created_by': p.get('created_by')
+        })
+        
+    except Exception as e:
+        print(f"❌ Erreur: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/proforma_lunette/<int:proforma_id>/print')
+@login_required
+def proforma_lunette_print(proforma_id):
+    """Imprimer une proforma lunetterie"""
+    from datetime import datetime
+    import json
+    
+    structure_id = session.get('structure_id')
+    
+    # Récupérer la proforma depuis Neon
+    proforma = db.execute_query("""
+        SELECT * FROM proformas_lunettes 
+        WHERE id = %s AND structure_id = %s
+    """, (proforma_id, structure_id))
+    
+    if not proforma:
+        flash('Proforma non trouvée', 'danger')
+        return redirect(url_for('dashboard'))
+    
+    p = proforma[0]
+    
+    # Récupérer les infos de la structure
+    structures = sheets_helper.get_all_records('structures', use_prefix=False)
+    structure_info = next((s for s in structures if str(s.get('ID')) == str(structure_id)), {})
+    
+    # Ajouter les champs RIB et affiliation (à ajouter dans la structure)
+    structure_info['rib'] = structure_info.get('rib', 'Non renseigné')
+    structure_info['numero_affiliation'] = structure_info.get('numero_affiliation', 'Non renseigné')
+    
+    # Récupérer les articles
+    articles = p.get('articles', [])
+    if isinstance(articles, str):
+        articles = json.loads(articles)
+    
+    # Calculer les totaux
+    sous_total_ht = 0
+    tva_taux = float(p.get('tva_taux', 18))
+    remise = float(p.get('remise', 0))
+    type_remise = p.get('type_remise', 'pourcentage')
+    valeur_remise = float(p.get('valeur_remise', 0))
+    
+    for article in articles:
+        prix = float(article.get('prix_unitaire', 0))
+        quantite = int(article.get('quantite', 1))
+        remise_article = float(article.get('remise', 0))
+        
+        # Calcul HT
+        montant_ht = prix * quantite
+        # Application de la remise si présente
+        if remise_article > 0:
+            montant_ht = montant_ht * (1 - remise_article / 100)
+        
+        article['montant_ht'] = montant_ht
+        article['tva'] = tva_taux
+        article['montant_ttc'] = montant_ht * (1 + tva_taux / 100)
+        
+        sous_total_ht += montant_ht
+    
+    # Remise globale
+    total_ttc = sous_total_ht * (1 + tva_taux / 100)
+    if remise > 0:
+        total_ttc = total_ttc - remise
+    
+    # Arrondir
+    total_ttc = round(total_ttc, 0)
+    
+    # Convertir en lettres (simplifié)
+    montant_lettres = nombre_en_lettres(int(total_ttc))
+    
+    return render_template('proformas/proforma_lunette_print.html',
+                         proforma=p,
+                         articles=articles,
+                         structure=structure_info,
+                         sous_total_ht=sous_total_ht,
+                         remise=remise,
+                         type_remise=type_remise,
+                         valeur_remise=valeur_remise,
+                         tva_taux=tva_taux,
+                         tva_montant=round(total_ttc - sous_total_ht, 0),
+                         total_ttc=total_ttc,
+                         montant_lettres=montant_lettres,
+                         date_actuelle=datetime.now().strftime('%d/%m/%Y %H:%M'))
+
+
+def nombre_en_lettres(n):
+    """Convertit un nombre en lettres (version simplifiée)"""
+    if n == 0:
+        return "ZÉRO"
+    
+    # Dictionnaire des nombres
+    unites = ["", "UN", "DEUX", "TROIS", "QUATRE", "CINQ", "SIX", "SEPT", "HUIT", "NEUF", 
+              "DIX", "ONZE", "DOUZE", "TREIZE", "QUATORZE", "QUINZE", "SEIZE", "DIX-SEPT", 
+              "DIX-HUIT", "DIX-NEUF"]
+    
+    dizaines = ["", "DIX", "VINGT", "TRENTE", "QUARANTE", "CINQUANTE", 
+                "SOIXANTE", "SOIXANTE-DIX", "QUATRE-VINGT", "QUATRE-VINGT-DIX"]
+    
+    if n < 20:
+        return unites[n]
+    
+    if n < 100:
+        d = n // 10
+        u = n % 10
+        if u == 0:
+            return dizaines[d]
+        elif d == 7 or d == 9:
+            return dizaines[d] + "-" + unites[u + 10]
+        else:
+            return dizaines[d] + "-" + unites[u]
+    
+    if n < 1000:
+        c = n // 100
+        r = n % 100
+        if c == 1:
+            if r == 0:
+                return "CENT"
+            return "CENT " + nombre_en_lettres(r)
+        if r == 0:
+            return unites[c] + " CENT"
+        return unites[c] + " CENT " + nombre_en_lettres(r)
+    
+    if n < 1000000:
+        m = n // 1000
+        r = n % 1000
+        if m == 1:
+            if r == 0:
+                return "MILLE"
+            return "MILLE " + nombre_en_lettres(r)
+        if r == 0:
+            return nombre_en_lettres(m) + " MILLE"
+        return nombre_en_lettres(m) + " MILLE " + nombre_en_lettres(r)
+    
+    return "MONTANT TROP ÉLEVÉ"
 
 if __name__ == '__main__':
     # Récupère le port depuis la variable d'environnement ou utilise 5000 par défaut

@@ -42,41 +42,31 @@
                     </div>
                 </div>
                 
+                <!-- Tableau avec colonnes réduites -->
                 <div class="table-responsive">
-                    <table class="table table-hover table-bordered" id="patientsTable">
+                    <table class="table table-hover table-bordered table-striped" id="patientsTable">
                         <thead class="table-light">
                             <tr>
-                                <th style="width: 4%">ID</th>
-                                <th style="width: 15%">Nom complet</th>
-                                <th style="width: 10%">Téléphone</th>
-                                <th style="width: 12%">Adresse</th>
-                                <th style="width: 10%">Date naissance / Âge</th>
-                                <th style="width: 10%">Assurance</th>
-                                <th style="width: 4%">Taux</th>
-                                <th style="width: 10%">Assurance 2</th>
-                                <th style="width: 4%">Taux 2</th>
-                                <th style="width: 10%">Contact d'urgence</th>
-                                <th style="width: 8%">Tél. urgence</th>
-                                <th style="width: 6%">Lien</th>
-                                <th style="width: 5%">Actions</th>
+                                <th style="width: 4%; min-width: 40px; text-align: center;">ID</th>
+                                <th style="width: 18%; min-width: 140px;">Nom complet</th>
+                                <th style="width: 12%; min-width: 100px;">Téléphone</th>
+                                <th style="width: 12%; min-width: 100px;">Assurance</th>
+                                <th style="width: 6%; min-width: 50px; text-align: center;">Taux</th>
+                                <th style="width: 12%; min-width: 100px;">Assurance 2</th>
+                                <th style="width: 6%; min-width: 50px; text-align: center;">Taux 2</th>
+                                <th style="width: 30%; min-width: 250px; text-align: center;">Actions</th>
                             </tr>
                         </thead>
                         <tbody id="patientsList">
                             {% for patient in patients %}
                             <tr class="patient-row" data-id="{{ patient.ID }}">
                                 <td style="vertical-align: middle; text-align: center;">{{ patient.ID }}</td>
-                                <td style="vertical-align: middle;">{{ patient.nom }} {{ patient.prenom }}</td>
-                                <td style="vertical-align: middle;">{{ patient.telephone }}</td>
-                                <td style="vertical-align: middle;">{{ patient.adresse or '-' }}</td>
                                 <td style="vertical-align: middle;">
-                                    {% if patient.date_naissance %}
-                                        {{ patient.date_naissance }} 
-                                        <span class="text-muted">({{ patient.age }} ans)</span>
-                                    {% else %}
-                                        <span class="text-muted">-</span>
-                                    {% endif %}
+                                    <strong>{{ patient.nom }} {{ patient.prenom }}</strong>
+                                    <br><small class="text-muted">{{ patient.age or 'Âge non renseigné' }} ans</small>
                                 </td>
-                                <td style="vertical-align: middle;">
+                                <td style="vertical-align: middle; white-space: nowrap;">{{ patient.telephone }}</td>
+                                <td style="vertical-align: middle; white-space: nowrap;">
                                     {% if patient.type_assurance == 'non_assure' %}
                                         <span class="badge bg-secondary">Non assuré</span>
                                     {% elif patient.type_assurance == 'amu_cnss' %}
@@ -88,7 +78,7 @@
                                     {% endif %}
                                 </td>
                                 <td style="vertical-align: middle; text-align: center;">{{ patient.taux_prise_charge or 0 }}%</td>
-                                <td style="vertical-align: middle;">
+                                <td style="vertical-align: middle; white-space: nowrap;">
                                     {% if patient.assurance2_nom %}
                                         <span class="badge bg-success">{{ patient.assurance2_nom }}</span>
                                     {% else %}
@@ -96,18 +86,21 @@
                                     {% endif %}
                                 </td>
                                 <td style="vertical-align: middle; text-align: center;">{{ patient.taux_assurance2 or 0 }}%</td>
-                                <td style="vertical-align: middle;">{{ patient.personne_a_prevenir_nom or '-' }}</td>
-                                <td style="vertical-align: middle;">{{ patient.personne_a_prevenir_telephone or '-' }}</td>
-                                <td style="vertical-align: middle;">{{ patient.personne_a_prevenir_relation or '-' }}</td>
                                 <td style="vertical-align: middle; text-align: center;">
-                                    <div class="btn-group btn-group-sm">
+                                    <div class="btn-group btn-group-sm" style="flex-wrap: wrap; gap: 3px;">
                                         <button class="btn btn-success" onclick='selectPatient({{ patient.ID }}, "{{ patient.nom }} {{ patient.prenom }}", "{{ patient.type_assurance }}", {{ patient.taux_prise_charge or 0 }}, "{{ patient.assurance2_nom or '' }}", {{ patient.taux_assurance2 or 0 }})' title="Sélectionner">
-                                            <i class="fas fa-check"></i>
+                                            <i class="fas fa-check"></i> Sélectionner
+                                        </button>
+                                        <button class="btn btn-info" onclick="voirDetails({{ patient.ID }})" title="Voir détails">
+                                            <i class="fas fa-eye"></i> Détails
                                         </button>
                                         <button class="btn btn-warning" onclick="editPatient({{ patient.ID }})" title="Modifier">
                                             <i class="fas fa-edit"></i>
                                         </button>
-                                        <button class="btn btn-info" onclick="envoyerLienPatient({{ patient.ID }}, '{{ patient.nom }} {{ patient.prenom }}', '{{ patient.telephone }}')" title="WhatsApp">
+                                        <button class="btn btn-danger" onclick="supprimerPatient({{ patient.ID }})" title="Supprimer">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                        <button class="btn btn-success" onclick="envoyerLienPatient({{ patient.ID }}, '{{ patient.nom }} {{ patient.prenom }}', '{{ patient.telephone }}')" title="WhatsApp">
                                             <i class="fab fa-whatsapp"></i>
                                         </button>
                                     </div>
@@ -115,7 +108,7 @@
                             </tr>
                             {% else %}
                             <tr>
-                                <td colspan="13" class="text-center">Aucun patient</td>
+                                <td colspan="8" class="text-center">Aucun patient</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -129,6 +122,30 @@
                         </nav>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== MODAL DÉTAILS PATIENT ===== -->
+<div class="modal fade" id="detailPatientModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title"><i class="fas fa-user"></i> Détails du patient</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="detailPatientBody">
+                <div class="text-center">Chargement...</div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+                <button class="btn btn-success" onclick="selectionnerDepuisDetails()" id="btnSelectFromDetail">
+                    <i class="fas fa-check"></i> Sélectionner
+                </button>
+                <button class="btn btn-warning" onclick="modifierDepuisDetails()" id="btnEditFromDetail">
+                    <i class="fas fa-edit"></i> Modifier
+                </button>
             </div>
         </div>
     </div>
@@ -499,12 +516,13 @@
 
 <script>
 // ============================================
-// VARIABLES POUR LA PAGINATION
+// VARIABLES GLOBALES
 // ============================================
 let allPatients = [];
 let currentPage = 1;
 let rowsPerPage = 10;
 let currentFiltered = [];
+let detailPatientId = null;
 
 // ============================================
 // FONCTIONS DE PROGRESSION
@@ -673,7 +691,7 @@ function exportToCSV() {
     let csvContent = "ID,Nom complet,Téléphone,Adresse,Date naissance,Assurance,Taux,Assurance2,Taux2,Contact urgence,Tél urgence,Lien parenté\n";
     currentFiltered.forEach(p => {
         const cells = p.element.cells;
-        csvContent += `"${cells[0].innerText}","${cells[1].innerText}","${cells[2].innerText}","${cells[3].innerText}","${cells[4].innerText}","${cells[5].innerText}","${cells[6].innerText}","${cells[7]?.innerText || ''}","${cells[8]?.innerText || ''}","${cells[9]?.innerText || ''}","${cells[10]?.innerText || ''}","${cells[11]?.innerText || ''}"\n`;
+        csvContent += `"${cells[0].innerText}","${cells[1].innerText.replace(/<br>.*/, '')}","${cells[2].innerText}","${cells[3].innerText}","${cells[4].innerText}","${cells[5].innerText}","${cells[6].innerText}","${cells[7]?.innerText || ''}","${cells[8]?.innerText || ''}","${cells[9]?.innerText || ''}","${cells[10]?.innerText || ''}","${cells[11]?.innerText || ''}"\n`;
     });
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
@@ -681,6 +699,195 @@ function exportToCSV() {
     link.download = 'patients.csv';
     link.click();
     URL.revokeObjectURL(link.href);
+}
+
+// ============================================
+// VOIR DÉTAILS PATIENT
+// ============================================
+function voirDetails(id) {
+    if (!id || id === 'undefined') {
+        alert('Erreur: ID patient invalide');
+        return;
+    }
+    
+    detailPatientId = id;
+    
+    // Récupérer les données du patient depuis la ligne
+    const row = document.querySelector(`tr.patient-row[data-id="${id}"]`);
+    if (!row) {
+        alert('Patient non trouvé');
+        return;
+    }
+    
+    const cells = row.cells;
+    
+    // Extraire les données
+    const nomComplet = cells[1].innerText.trim();
+    const telephone = cells[2].innerText.trim();
+    const assurance = cells[3].innerText.trim();
+    const taux = cells[4].innerText.trim();
+    const assurance2 = cells[5].innerText.trim();
+    const taux2 = cells[6].innerText.trim();
+    
+    // Récupérer les données complètes depuis le backend
+    fetch(`/api/patients/${id}`)
+        .then(response => response.json())
+        .then(patient => {
+            afficherDetailsPatient(patient);
+        })
+        .catch(error => {
+            // Fallback: afficher avec les données du tableau
+            afficherDetailsPatient({
+                ID: id,
+                nom: nomComplet.split(' ')[0] || '',
+                prenom: nomComplet.split(' ').slice(1).join(' ') || '',
+                telephone: telephone,
+                adresse: cells[3]?.innerText || '-',
+                date_naissance: cells[4]?.innerText || '-',
+                age: cells[1]?.innerText.match(/\d+/)?.[0] || '-',
+                type_assurance: assurance,
+                taux_prise_charge: parseInt(taux) || 0,
+                assurance2_nom: assurance2,
+                taux_assurance2: parseInt(taux2) || 0,
+                personne_a_prevenir_nom: cells[9]?.innerText || '-',
+                personne_a_prevenir_telephone: cells[10]?.innerText || '-',
+                personne_a_prevenir_relation: cells[11]?.innerText || '-'
+            });
+        });
+}
+
+function afficherDetailsPatient(patient) {
+    const body = document.getElementById('detailPatientBody');
+    
+    let html = `
+        <div class="row">
+            <div class="col-md-6">
+                <h6><i class="fas fa-user"></i> Informations personnelles</h6>
+                <table class="table table-sm table-borderless">
+                    <tr><td><strong>ID</strong></td><td>${patient.ID}</td></tr>
+                    <tr><td><strong>Nom complet</strong></td><td>${patient.nom} ${patient.prenom || ''}</td></tr>
+                    <tr><td><strong>Téléphone</strong></td><td>${patient.telephone}</td></tr>
+                    <tr><td><strong>Adresse</strong></td><td>${patient.adresse || '-'}</td></tr>
+                    <tr><td><strong>Date de naissance</strong></td><td>${patient.date_naissance || '-'}</td></tr>
+                    <tr><td><strong>Âge</strong></td><td>${patient.age || '-'} ans</td></tr>
+                </table>
+            </div>
+            <div class="col-md-6">
+                <h6><i class="fas fa-shield-alt"></i> Assurances</h6>
+                <table class="table table-sm table-borderless">
+                    <tr>
+                        <td><strong>Assurance principale</strong></td>
+                        <td>
+                            ${patient.type_assurance == 'non_assure' ? '<span class="badge bg-secondary">Non assuré</span>' : 
+                              patient.type_assurance == 'amu_cnss' ? '<span class="badge bg-success">AMU-CNSS</span>' : 
+                              patient.type_assurance == 'amu_inam' ? '<span class="badge bg-primary">AMU-INAM</span>' : 
+                              `<span class="badge bg-info">${patient.type_assurance}</span>`}
+                        </td>
+                    </tr>
+                    <tr><td><strong>Taux</strong></td><td>${patient.taux_prise_charge || 0}%</td></tr>
+                    <tr>
+                        <td><strong>Assurance complémentaire</strong></td>
+                        <td>${patient.assurance2_nom ? `<span class="badge bg-success">${patient.assurance2_nom}</span>` : '-'}</td>
+                    </tr>
+                    <tr><td><strong>Taux 2</strong></td><td>${patient.taux_assurance2 || 0}%</td></tr>
+                </table>
+            </div>
+        </div>
+        <div class="row mt-3">
+            <div class="col-md-12">
+                <h6><i class="fas fa-phone-alt"></i> Contact d'urgence</h6>
+                <table class="table table-sm table-borderless">
+                    <tr><td><strong>Nom</strong></td><td>${patient.personne_a_prevenir_nom || '-'}</td></tr>
+                    <tr><td><strong>Téléphone</strong></td><td>${patient.personne_a_prevenir_telephone || '-'}</td></tr>
+                    <tr><td><strong>Lien parenté</strong></td><td>${patient.personne_a_prevenir_relation || '-'}</td></tr>
+                </table>
+            </div>
+        </div>
+    `;
+    
+    body.innerHTML = html;
+    document.getElementById('btnSelectFromDetail').setAttribute('data-id', patient.ID);
+    document.getElementById('btnEditFromDetail').setAttribute('data-id', patient.ID);
+    new bootstrap.Modal(document.getElementById('detailPatientModal')).show();
+}
+
+function selectionnerDepuisDetails() {
+    const btn = document.getElementById('btnSelectFromDetail');
+    const id = btn.getAttribute('data-id');
+    if (id) {
+        const row = document.querySelector(`tr.patient-row[data-id="${id}"]`);
+        if (row) {
+            const cells = row.cells;
+            const nomComplet = cells[1].innerText.trim();
+            const assurance = cells[3].innerText.trim();
+            const taux = cells[4].innerText.trim();
+            const assurance2 = cells[5].innerText.trim();
+            const taux2 = cells[6].innerText.trim();
+            
+            // Convertir les noms d'assurance pour selectPatient
+            let assuranceCode = 'non_assure';
+            if (assurance.toLowerCase().includes('amu-cnss')) assuranceCode = 'amu_cnss';
+            else if (assurance.toLowerCase().includes('amu-inam')) assuranceCode = 'amu_inam';
+            else if (assurance.toLowerCase().includes('non assuré')) assuranceCode = 'non_assure';
+            else assuranceCode = assurance;
+            
+            bootstrap.Modal.getInstance(document.getElementById('detailPatientModal')).hide();
+            selectPatient(id, nomComplet, assuranceCode, parseInt(taux) || 0, assurance2, parseInt(taux2) || 0);
+        }
+    }
+}
+
+function modifierDepuisDetails() {
+    const btn = document.getElementById('btnEditFromDetail');
+    const id = btn.getAttribute('data-id');
+    if (id) {
+        bootstrap.Modal.getInstance(document.getElementById('detailPatientModal')).hide();
+        setTimeout(() => {
+            editPatient(parseInt(id));
+        }, 300);
+    }
+}
+
+// ============================================
+// SUPPRIMER PATIENT
+// ============================================
+function supprimerPatient(id) {
+    if (!id || id === 'undefined') {
+        alert('Erreur: ID patient invalide');
+        return;
+    }
+    
+    const row = document.querySelector(`tr.patient-row[data-id="${id}"]`);
+    if (!row) {
+        alert('Patient non trouvé');
+        return;
+    }
+    
+    const nomComplet = row.cells[1].innerText.trim();
+    
+    if (!confirm(`⚠️ Supprimer définitivement le patient "${nomComplet}" ?\n\nCette action est irréversible.`)) {
+        return;
+    }
+    
+    showLoader('Suppression du patient...');
+    
+    fetch(`/api/patients/${id}`, {
+        method: 'DELETE'
+    })
+    .then(response => response.json())
+    .then(data => {
+        hideLoader();
+        if(data.success) {
+            alert('✅ Patient supprimé avec succès !');
+            location.reload();
+        } else {
+            alert('❌ Erreur: ' + (data.error || 'Erreur inconnue'));
+        }
+    })
+    .catch(error => {
+        hideLoader();
+        alert('❌ Erreur lors de la suppression: ' + error);
+    });
 }
 
 // ============================================
@@ -916,7 +1123,7 @@ function editPatient(id) {
     const nom = firstSpace > 0 ? nomComplet.substring(0, firstSpace) : nomComplet;
     const prenom = firstSpace > 0 ? nomComplet.substring(firstSpace + 1) : '';
     
-    const assuranceText = cells[5].innerText.toLowerCase();
+    const assuranceText = cells[3].innerText.toLowerCase();
     let assuranceValue = 'non_assure';
     let autreAssuranceValue = '';
     
@@ -926,45 +1133,78 @@ function editPatient(id) {
         assuranceValue = 'amu_inam';
     } else if (!assuranceText.includes('non assuré')) {
         assuranceValue = 'autre';
-        autreAssuranceValue = cells[5].innerText.trim();
+        autreAssuranceValue = cells[3].innerText.trim();
     }
     
-    const assurance2Text = cells[7]?.innerText || '';
-    const taux2Text = cells[8]?.innerText || '';
+    const assurance2Text = cells[5]?.innerText || '';
+    const taux2Text = cells[6]?.innerText || '';
     
-    const personnePrevenirNom = cells[9]?.innerText || '';
-    const personnePrevenirTelephone = cells[10]?.innerText || '';
-    const personnePrevenirRelation = cells[11]?.innerText || '';
-    
-    document.getElementById('editId').value = id;
-    document.getElementById('editNom').value = nom;
-    document.getElementById('editPrenom').value = prenom;
-    document.getElementById('editTelephone').value = cells[2].innerText;
-    document.getElementById('editAdresse').value = cells[3].innerText !== '-' ? cells[3].innerText : '';
-    
-    const dateNaissance = cells[4].innerText !== '-' ? cells[4].innerText.split(' ')[0] : '';
-    document.getElementById('editDateNaissance').value = dateNaissance;
-    document.getElementById('editAge').value = calculerAge(dateNaissance);
-    
-    document.getElementById('editTaux').value = cells[6].innerText.replace('%', '');
-    document.getElementById('editAssurance').value = assuranceValue;
-    document.getElementById('editAutreAssurance').value = autreAssuranceValue;
-    document.getElementById('editNumeroAssure').value = '';
-    
-    document.getElementById('editAssurance2_nom').value = assurance2Text.trim() || '';
-    document.getElementById('editTauxAssurance2').value = parseFloat(taux2Text) || 0;
-    document.getElementById('editNumeroAssure2').value = '';
-    document.getElementById('editAutreAssurance2').value = '';
-    document.getElementById('editAutreAssurance2Div').style.display = 'none';
-    
-    document.getElementById('editPersonnePrevenirNom').value = personnePrevenirNom || '';
-    document.getElementById('editPersonnePrevenirTelephone').value = personnePrevenirTelephone || '';
-    document.getElementById('editPersonnePrevenirRelation').value = personnePrevenirRelation || '';
-    
-    toggleEditTaux();
-    toggleEditAssurance2();
-    
-    new bootstrap.Modal(document.getElementById('editPatientModal')).show();
+    // Récupérer les données complètes depuis le backend
+    fetch(`/api/patients/${id}`)
+        .then(response => response.json())
+        .then(patient => {
+            document.getElementById('editId').value = id;
+            document.getElementById('editNom').value = patient.nom || nom;
+            document.getElementById('editPrenom').value = patient.prenom || prenom;
+            document.getElementById('editTelephone').value = patient.telephone || cells[2].innerText;
+            document.getElementById('editAdresse').value = patient.adresse || (cells[3]?.innerText !== '-' ? cells[3]?.innerText : '');
+            
+            const dateNaissance = patient.date_naissance || '';
+            document.getElementById('editDateNaissance').value = dateNaissance;
+            document.getElementById('editAge').value = patient.age || calculerAge(dateNaissance);
+            
+            document.getElementById('editTaux').value = patient.taux_prise_charge || 0;
+            document.getElementById('editAssurance').value = patient.type_assurance || assuranceValue;
+            document.getElementById('editAutreAssurance').value = patient.type_assurance || '';
+            document.getElementById('editNumeroAssure').value = patient.numero_assure || '';
+            
+            document.getElementById('editAssurance2_nom').value = patient.assurance2_nom || '';
+            document.getElementById('editTauxAssurance2').value = patient.taux_assurance2 || 0;
+            document.getElementById('editNumeroAssure2').value = patient.numero_assure2 || '';
+            document.getElementById('editAutreAssurance2').value = '';
+            document.getElementById('editAutreAssurance2Div').style.display = 'none';
+            
+            document.getElementById('editPersonnePrevenirNom').value = patient.personne_a_prevenir_nom || '';
+            document.getElementById('editPersonnePrevenirTelephone').value = patient.personne_a_prevenir_telephone || '';
+            document.getElementById('editPersonnePrevenirRelation').value = patient.personne_a_prevenir_relation || '';
+            
+            toggleEditTaux();
+            toggleEditAssurance2();
+            
+            new bootstrap.Modal(document.getElementById('editPatientModal')).show();
+        })
+        .catch(error => {
+            // Fallback avec les données du tableau
+            document.getElementById('editId').value = id;
+            document.getElementById('editNom').value = nom;
+            document.getElementById('editPrenom').value = prenom;
+            document.getElementById('editTelephone').value = cells[2].innerText;
+            document.getElementById('editAdresse').value = cells[3]?.innerText !== '-' ? cells[3]?.innerText : '';
+            
+            const dateNaissance = cells[4]?.innerText !== '-' ? cells[4]?.innerText.split(' ')[0] : '';
+            document.getElementById('editDateNaissance').value = dateNaissance;
+            document.getElementById('editAge').value = calculerAge(dateNaissance);
+            
+            document.getElementById('editTaux').value = cells[4]?.innerText.replace('%', '') || 0;
+            document.getElementById('editAssurance').value = assuranceValue;
+            document.getElementById('editAutreAssurance').value = autreAssuranceValue;
+            document.getElementById('editNumeroAssure').value = '';
+            
+            document.getElementById('editAssurance2_nom').value = assurance2Text.trim() || '';
+            document.getElementById('editTauxAssurance2').value = parseFloat(taux2Text) || 0;
+            document.getElementById('editNumeroAssure2').value = '';
+            document.getElementById('editAutreAssurance2').value = '';
+            document.getElementById('editAutreAssurance2Div').style.display = 'none';
+            
+            document.getElementById('editPersonnePrevenirNom').value = cells[9]?.innerText || '';
+            document.getElementById('editPersonnePrevenirTelephone').value = cells[10]?.innerText || '';
+            document.getElementById('editPersonnePrevenirRelation').value = cells[11]?.innerText || '';
+            
+            toggleEditTaux();
+            toggleEditAssurance2();
+            
+            new bootstrap.Modal(document.getElementById('editPatientModal')).show();
+        });
 }
 
 function saveEditPatient() {
@@ -1117,10 +1357,10 @@ document.addEventListener('DOMContentLoaded', function() {
             id: cells[0].innerText,
             nomComplet: cells[1].innerText.toLowerCase(),
             telephone: cells[2].innerText,
-            adresse: cells[3].innerText,
-            dateNaissance: cells[4].innerText,
-            assurance: cells[5].innerText.toLowerCase(),
-            taux: cells[6].innerText,
+            adresse: cells[3]?.innerText || '',
+            dateNaissance: cells[4]?.innerText || '',
+            assurance: cells[5]?.innerText.toLowerCase() || '',
+            taux: cells[6]?.innerText || '',
             assurance2: cells[7]?.innerText || '',
             taux2: cells[8]?.innerText || '',
             contactUrgence: cells[9]?.innerText || '',
