@@ -7458,15 +7458,16 @@ def notify_consultation_app(patient_id, structure_id):
 def api_medicamentos():
     """
     API pour récupérer les médicaments depuis Google Sheets
-    Feuille dynamique : struct_{structure_id}_produits
     """
+    import traceback
+    
     # Vérifier le token
     token = request.args.get('token')
     if not token:
         return jsonify({'error': 'Token manquant'}), 401
     
-    # Vérifier que le token est valide
-    from models import StructureMapping
+    # ⭐ Les modèles sont déjà dans app.py, on peut les utiliser directement
+    # StructureMapping est déjà disponible
     mapping = StructureMapping.query.filter_by(api_key=token, actif=True).first()
     if not mapping:
         return jsonify({'error': 'Token invalide'}), 401
@@ -7474,26 +7475,29 @@ def api_medicamentos():
     try:
         from sheets_helper import sheets_helper
         
-        # ⭐ Passer le source_structure_id
-        medicamentos = sheets_helper.get_medicamentos(mapping.source_structure_id)
+        # Vérifier que sheets_helper est bien initialisé
+        if not sheets_helper:
+            return jsonify({'error': 'sheets_helper non initialisé'}), 500
         
-        if not medicamentos:
-            return jsonify({
-                'success': True,
-                'medicamentos': [],
-                'total': 0,
-                'structure_id': mapping.source_structure_id
-            })
+        # Récupérer les médicaments
+        structure_id = mapping.source_structure_id
+        print(f"📡 Récupération médicaments pour structure {structure_id}")
+        
+        medicamentos = sheets_helper.get_medicamentos(structure_id)
+        
+        if medicamentos is None:
+            return jsonify({'error': 'Erreur récupération médicaments'}), 500
         
         return jsonify({
             'success': True,
             'medicamentos': medicamentos,
             'total': len(medicamentos),
-            'structure_id': mapping.source_structure_id
+            'structure_id': structure_id
         })
         
     except Exception as e:
         print(f"❌ Erreur récupération médicaments: {e}")
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
