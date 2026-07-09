@@ -4166,8 +4166,8 @@ def api_vente_pharma():
                 if cell:
                     row_num = cell.row
                     current_row = worksheet.row_values(row_num)
-                    # 🔥 Stock est en colonne E (index 4) car PBR est en colonne D (index 3)
-                    stock_actuel = int(current_row[4]) if len(current_row) > 4 else 0
+                    # 🔥 Stock est en colonne F (index 5) car PBR est en colonne D (index 3)
+                    stock_actuel = int(current_row[5]) if len(current_row) > 5 else 0
                     nouveau_stock = stock_actuel - quantite_vendue
                     
                     if nouveau_stock < 0:
@@ -4175,7 +4175,7 @@ def api_vente_pharma():
                         nouveau_stock = 0
                     
                     print(f"   📊 Stock: {stock_actuel} → {nouveau_stock}")
-                    worksheet.update_cell(row_num, 5, nouveau_stock)  # 🔥 Colonne E = index 5 (1-based)
+                    worksheet.update_cell(row_num, 6, nouveau_stock)  # 🔥 Colonne F = index 6 (1-based)
                     print(f"   ✅ Stock Sheets mis à jour pour {produit_nom}")
                 else:
                     print(f"   ❌ Produit ID {produit_id} non trouvé dans Sheets!")

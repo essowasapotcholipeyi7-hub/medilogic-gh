@@ -1186,9 +1186,9 @@ function finaliserVente() {
     
     // 🔥 Recalcul avec PBR et prise en charge
     let sousTotal = 0;
-    let pbrTotalAMU = 0;          // PBR des articles pris en charge par AMU
-    let sousTotalAMU = 0;         // Total clinique des articles pris en charge par AMU
-    let montantNonPriseEnCharge = 0; // Total des articles non pris en charge par les deux
+    let pbrTotalAMU = 0;
+    let sousTotalAMU = 0;
+    let montantNonPriseEnCharge = 0;
     
     for (const item of panier) {
         const prix = item.prix;
@@ -1197,17 +1197,14 @@ function finaliserVente() {
         
         sousTotal += total;
         
-        // 🔥 Vérifier si l'article est pris en charge par au moins une assurance
         const estPriseEnCharge = (item.prise_en_charge_amu !== false) || (item.prise_en_charge_cac !== false);
         
         if (!estPriseEnCharge) {
             montantNonPriseEnCharge += total;
         }
         
-        // 🔥 VÉRIFIER LA PRISE EN CHARGE AMU
         if (item.prise_en_charge_amu !== false) {
             sousTotalAMU += total;
-            // Règle PBR : si prix < PBR, on utilise le prix
             let basePBR = pbr;
             if (prix < pbr) {
                 basePBR = prix;
@@ -1216,22 +1213,18 @@ function finaliserVente() {
         }
     }
     
-    // 🔥 Base de remboursement pour AMU
     let baseRemboursement = pbrTotalAMU;
     if (sousTotalAMU < pbrTotalAMU) {
         baseRemboursement = sousTotalAMU;
     }
     
-    // 🔥 Prise en charge AMU
     let priseEnCharge = 0;
     if (baseRemboursement > 0 && tauxPrincipal > 0) {
         priseEnCharge = (baseRemboursement * tauxPrincipal) / 100;
     }
     
-    // 🔥 Reste après AMU (pour les articles pris en charge par AMU)
     let resteApresAMU = sousTotalAMU - priseEnCharge;
     
-    // 🔥 Prise en charge CAC
     let priseEnCharge2 = 0;
     let tauxComplementaire = patientTaux2Original || 0;
     if (tauxTempModifie) {
@@ -1246,10 +1239,8 @@ function finaliserVente() {
             const pbr = item.pbr || item.prix;
             const total = prix * item.quantite;
             
-            // 🔥 Vérifier si l'article est pris en charge par CAC
             if (item.prise_en_charge_cac !== false) {
                 if (item.prise_en_charge_amu !== false) {
-                    // Pris en charge par AMU et CAC
                     let basePBR = pbr;
                     if (prix < pbr) {
                         basePBR = prix;
@@ -1261,7 +1252,6 @@ function finaliserVente() {
                         baseCAC += reste;
                     }
                 } else {
-                    // 🔥 NON pris en charge par AMU, MAIS pris en charge par CAC
                     baseCAC += total;
                 }
             }
@@ -1281,7 +1271,6 @@ function finaliserVente() {
         pbr: parseFloat(item.pbr || item.prix),
         quantite: parseInt(item.quantite),
         total: parseFloat(item.total),
-        // 🔥 AJOUT DES INFOS DE PRISE EN CHARGE
         prise_en_charge_amu: item.prise_en_charge_amu !== false,
         prise_en_charge_cac: item.prise_en_charge_cac !== false
     }));
@@ -1302,28 +1291,56 @@ function finaliserVente() {
         resteAPayer = 0;
     }
     
-    // 🔥 VÉRIFICATION : MONTANT DONNÉ = 0
+    // ⭐⭐⭐ NOUVELLE CONDITION : VÉRIFICATION SI MONTANT DONNÉ = 0 ⭐⭐⭐
     if (montantDonne === 0 && netAPayer > 0) {
         let tauxTotal = tauxPrincipal + (assurance2Active ? (tauxComplementaire || 0) : 0);
         
-        let msg = `⚠️ Le patient n'a pas donné d'argent.\n\n`;
-        msg += `💰 Net à payer: ${netAPayer.toLocaleString()} FCFA\n`;
-        msg += `🏥 Assurance principale: ${tauxPrincipal}%\n`;
+        // Demander à l'utilisateur de confirmer en tapant "000"
+        const confirmation = prompt(
+            `⚠️ ATTENTION !\n\n` +
+            `Le montant donné est de 0 FCFA.\n` +
+            `Net à payer : ${netAPayer.toLocaleString()} FCFA\n` +
+            `Assurance principale : ${tauxPrincipal}%\n` +
+            (assurance2Active && patientAssurance2 && patientAssurance2 !== 'Aucune' ? 
+                `Assurance complémentaire : ${patientAssurance2} (${tauxComplementaire || 0}%)\n` : '') +
+            `\n` +
+            `Pour confirmer que le patient n'a vraiment rien donné,\n` +
+            `tapez "000" dans le champ ci-dessous :\n\n` +
+            `(Si c'est une erreur, annulez et saisissez le bon montant)`
+        );
+        
+        // Si l'utilisateur annule ou ne tape pas "000"
+        if (confirmation !== "000") {
+            alert('❌ Opération annulée. Veuillez saisir le montant donné par le patient.');
+            document.getElementById('montantDonne').focus();
+            document.getElementById('montantDonne').select();
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+            return;
+        }
+        
+        // Confirmation supplémentaire
+        let msgFinal = `⚠️ DERNIÈRE CONFIRMATION :\n\n`;
+        msgFinal += `Le patient ${patientName} n'a donné AUCUN argent (0 FCFA).\n`;
+        msgFinal += `💰 Net à payer : ${netAPayer.toLocaleString()} FCFA\n`;
+        msgFinal += `🏥 Assurance principale : ${tauxPrincipal}%\n`;
         if (assurance2Active && patientAssurance2 && patientAssurance2 !== 'Aucune') {
-            msg += `🏥 Assurance complémentaire: ${patientAssurance2} (${tauxComplementaire || 0}%)\n`;
+            msgFinal += `🏥 Assurance complémentaire : ${patientAssurance2} (${tauxComplementaire || 0}%)\n`;
         }
-        msg += `\n📋 Taux de couverture total: ${tauxTotal}%\n\n`;
+        msgFinal += `\n📋 Taux de couverture total : ${tauxTotal}%\n\n`;
+        msgFinal += `Voulez-vous vraiment continuer ?`;
         
-        if (tauxTotal === 0) {
-            msg += `❌ Le patient n'a pas d'assurance et ne donne rien.\n\n`;
-            msg += `Voulez-vous vraiment finaliser cette vente sans paiement ?`;
-        } else {
-            msg += `✅ L'assurance couvre-t-elle l'intégralité de la facture ?\n\n`;
-            msg += `Cliquez sur OK pour confirmer ou Annuler pour modifier.`;
+        if (!confirm(msgFinal)) {
+            document.getElementById('montantDonne').focus();
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+            return;
         }
-        
-        if (!confirm(msg)) {
-            console.log('Vente annulée par l\'utilisateur');
+    }
+    
+    // Vérifier si le patient a donné assez d'argent (mais pas 0)
+    if (montantDonne > 0 && montantDonne < netAPayer) {
+        if (!confirm(`⚠️ Le patient a donné ${montantDonne.toLocaleString()} FCFA mais le net à payer est de ${netAPayer.toLocaleString()} FCFA.\n\nIl reste ${resteAPayer.toLocaleString()} FCFA à payer.\n\nVoulez-vous continuer ?`)) {
             document.getElementById('montantDonne').focus();
             btn.disabled = false;
             btn.innerHTML = originalText;
@@ -1334,7 +1351,7 @@ function finaliserVente() {
     let vente = {
         patient_id: parseInt(patientId),
         patient_nom: patientName,
-        actes: actesData,  // 🔥 Contient maintenant les infos de prise en charge
+        actes: actesData,
         sous_total: parseFloat(sousTotal),
         base_remboursement: parseFloat(baseRemboursement),
         prise_en_charge: parseFloat(priseEnCharge),
@@ -1440,7 +1457,6 @@ function finaliserVente() {
         btn.innerHTML = originalText;
     });
 }
-
 // ============================================
 // REDIRECTION
 // ============================================

@@ -1339,8 +1339,35 @@ function finaliserVente() {
     const { sousTotal, baseRemboursement, priseEnCharge, priseEnCharge2, netAPayer } = window._calculs || { sousTotal: 0, baseRemboursement: 0, priseEnCharge: 0, priseEnCharge2: 0, netAPayer: 0 };
     const { montantDonne, rendu, resteAPayer } = window._paiement || { montantDonne: 0, rendu: 0, resteAPayer: 0 };
     
-    // Vérifier si le patient a donné assez d'argent
-    if (montantDonne < netAPayer && montantDonne > 0) {
+    // ⭐⭐⭐ NOUVELLE CONDITION : VÉRIFICATION SI MONTANT DONNÉ = 0 ⭐⭐⭐
+    if (montantDonne === 0 && netAPayer > 0) {
+        // Demander à l'utilisateur de confirmer en tapant "000"
+        const confirmation = prompt(
+            `⚠️ ATTENTION !\n\n` +
+            `Le montant donné est de 0 FCFA.\n` +
+            `Net à payer : ${netAPayer.toLocaleString()} FCFA\n\n` +
+            `Pour confirmer que le patient n'a vraiment rien donné,\n` +
+            `tapez "000" dans le champ ci-dessous :\n\n` +
+            `(Si c'est une erreur, annulez et saisissez le bon montant)`
+        );
+        
+        // Si l'utilisateur annule ou ne tape pas "000"
+        if (confirmation !== "000") {
+            alert('❌ Opération annulée. Veuillez saisir le montant donné par le patient.');
+            document.getElementById('montantDonne').focus();
+            document.getElementById('montantDonne').select();
+            return;
+        }
+        
+        // Confirmation supplémentaire
+        if (!confirm(`⚠️ DERNIÈRE CONFIRMATION :\n\nLe patient ${patientNom} n'a donné AUCUN argent (0 FCFA).\nLe reste à payer est de ${resteAPayer.toLocaleString()} FCFA.\n\nVoulez-vous vraiment continuer ?`)) {
+            document.getElementById('montantDonne').focus();
+            return;
+        }
+    }
+    
+    // Vérifier si le patient a donné assez d'argent (mais pas 0)
+    if (montantDonne > 0 && montantDonne < netAPayer) {
         if (!confirm(`⚠️ Le patient a donné ${montantDonne.toLocaleString()} FCFA mais le net à payer est de ${netAPayer.toLocaleString()} FCFA.\n\nIl reste ${resteAPayer.toLocaleString()} FCFA à payer.\n\nVoulez-vous continuer ?`)) {
             document.getElementById('montantDonne').focus();
             return;
