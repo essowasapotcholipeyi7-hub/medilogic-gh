@@ -55,12 +55,14 @@
                             <h3 class="text-primary mb-0" id="statTotalVentes">0</h3>
                         </div>
                     </div>
+                    {% if session.is_admin %}
                     <div class="col-md-3 text-center">
                         <div class="border rounded p-2">
                             <small class="text-muted">Chiffre d'affaires</small>
                             <h3 class="text-success mb-0" id="statCA">0 F</h3>
                         </div>
                     </div>
+                    {% endif %}
                     <div class="col-md-3 text-center">
                         <div class="border rounded p-2">
                             <small class="text-muted">Actes</small>
@@ -493,10 +495,10 @@ function afficherPageVentes(page) {
         var badgeClass = '';
         
         if (typeVente === 'pharma' || typeVente === 'pharmacie') {
-            typeLabel = '💊 Pharma';
+            typeLabel = ' Pharma';
             badgeClass = 'bg-success';
         } else if (typeVente === 'actes') {
-            typeLabel = '🩺 Acte';
+            typeLabel = ' Acte';
             badgeClass = 'bg-primary';
         } else {
             typeLabel = typeVente || 'Inconnu';
