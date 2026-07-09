@@ -9102,7 +9102,8 @@ def api_prix_actes():
         return jsonify({'success': False, 'message': str(e)}), 500
 
 if __name__ == '__main__':
-    # Récupère le port depuis la variable d'environnement ou utilise 5000 par défaut
-    port = int(os.environ.get("PORT", 5000))
-    # Bind sur l'interface réseau 0.0.0.0 pour être accessible publiquement
-    app.run(host='0.0.0.0', port=port, debug=False) # Mettez debug=False en production
+    import os
+    # ⭐ Récupérer le port depuis l'environnement ou utiliser 10000 par défaut
+    port = int(os.environ.get('PORT', 10000))
+    # ⭐ Toujours écouter sur 0.0.0.0 pour être accessible publiquement
+    app.run(host='0.0.0.0', port=port, debug=False)
