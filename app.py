@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
+from flask_mail import Mail, Message
 from config import Config
 from sheets_helper import sheets_helper
 import hashlib
